@@ -1,0 +1,22 @@
+{
+  "name": "ecommerce-sync",
+  "version": "1.0.0",
+  "description": "电商多渠道库存价格同步系统",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "build:api": "pnpm --filter api build",
+    "build:web": "pnpm --filter web build",
+    "db:generate": "pnpm --filter api db:generate",
+    "db:migrate": "pnpm --filter api db:migrate",
+    "db:push": "pnpm --filter api db:push"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["ecommerce", "sync", "inventory", "price"],
+  "author": "",
+  "license": "MIT"
+}

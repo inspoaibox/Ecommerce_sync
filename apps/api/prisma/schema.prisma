@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Status {
+  active
+  inactive
+}
+
+enum SyncRuleStatus {
+  active
+  paused
+  inactive
+}
+
+enum SyncType {
+  full
+  incremental
+}
+
+enum SyncStatus {
+  pending
+  synced
+  failed
+}
+
+enum SyncLogStatus {
+  running
+  success
+  partial
+  failed
+}
+
+enum TriggerType {
+  scheduled
+  manual
+}
+
+
+// 渠道表 - 数据来源
+model Channel {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  code        String   @unique @db.VarChar(50)
+  type        String   @db.VarChar(50)
+  apiConfig   Json     @map("api_config")
+  description String?  @db.Text
+  status      Status   @default(active)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  syncRules SyncRule[]
+
+  @@map("channels")
+}
+
+// 平台表 - 电商平台
+model Platform {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  code        String   @unique @db.VarChar(50)
+  apiBaseUrl  String?  @map("api_base_url") @db.VarChar(255)
+  description String?  @db.Text
+  status      Status   @default(active)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  shops Shop[]
+
+  @@map("platforms")
+}
+
+// 店铺表 - 目标店铺
+model Shop {
+  id             String   @id @default(uuid())
+  platformId     String   @map("platform_id")
+  name           String   @db.VarChar(100)
+  code           String   @unique @db.VarChar(50)
+  apiCredentials Json     @map("api_credentials")
+  region         String?  @db.VarChar(50)
+  description    String?  @db.Text
+  status         Status   @default(active)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  platform  Platform   @relation(fields: [platformId], references: [id])
+  syncRules SyncRule[]
+  products  Product[]
+
+  @@map("shops")
+}
+
+
+// 同步规则表
+model SyncRule {
+  id              String         @id @default(uuid())
+  name            String         @db.VarChar(100)
+  channelId       String         @map("channel_id")
+  shopId          String         @map("shop_id")
+  syncType        SyncType       @default(incremental) @map("sync_type")
+  intervalDays    Int            @default(1) @map("interval_days")
+  priceMultiplier Decimal        @default(1.0) @map("price_multiplier") @db.Decimal(10, 4)
+  priceAdjustment Decimal        @default(0) @map("price_adjustment") @db.Decimal(10, 2)
+  stockMultiplier Decimal        @default(1.0) @map("stock_multiplier") @db.Decimal(10, 4)
+  stockAdjustment Int            @default(0) @map("stock_adjustment")
+  fieldMapping    Json?          @map("field_mapping")
+  lastSyncAt      DateTime?      @map("last_sync_at")
+  nextSyncAt      DateTime?      @map("next_sync_at")
+  status          SyncRuleStatus @default(active)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  channel  Channel   @relation(fields: [channelId], references: [id])
+  shop     Shop      @relation(fields: [shopId], references: [id])
+  products Product[]
+  syncLogs SyncLog[]
+
+  @@map("sync_rules")
+}
+
+// 商品表
+model Product {
+  id                String     @id @default(uuid())
+  syncRuleId        String?    @map("sync_rule_id")
+  shopId            String?    @map("shop_id")
+  channelProductId  String     @map("channel_product_id") @db.VarChar(100)
+  sku               String     @db.VarChar(100)
+  title             String     @db.VarChar(500)
+  originalPrice     Decimal    @map("original_price") @db.Decimal(10, 2)
+  finalPrice        Decimal    @map("final_price") @db.Decimal(10, 2)
+  originalStock     Int        @map("original_stock")
+  finalStock        Int        @map("final_stock")
+  currency          String     @default("USD") @db.VarChar(10)
+  extraFields       Json?      @map("extra_fields")
+  platformProductId String?    @map("platform_product_id") @db.VarChar(100)
+  sourceChannel     String?    @map("source_channel") @db.VarChar(100)
+  syncStatus        SyncStatus @default(pending) @map("sync_status")
+  lastSyncAt        DateTime?  @map("last_sync_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  syncRule SyncRule? @relation(fields: [syncRuleId], references: [id])
+  shop     Shop?     @relation(fields: [shopId], references: [id])
+
+  @@unique([sourceChannel, sku])
+  @@map("products")
+}
+
+// 同步日志表
+model SyncLog {
+  id           String        @id @default(uuid())
+  syncRuleId   String        @map("sync_rule_id")
+  syncType     SyncType      @map("sync_type")
+  triggerType  TriggerType   @map("trigger_type")
+  startedAt    DateTime      @default(now()) @map("started_at")
+  finishedAt   DateTime?     @map("finished_at")
+  totalCount   Int           @default(0) @map("total_count")
+  successCount Int           @default(0) @map("success_count")
+  failCount    Int           @default(0) @map("fail_count")
+  status       SyncLogStatus @default(running)
+  errorMessage String?       @map("error_message") @db.Text
+  details      Json?
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  syncRule SyncRule @relation(fields: [syncRuleId], references: [id])
+
+  @@map("sync_logs")
+}
