@@ -21,7 +21,12 @@ export const channelApi = {
   update: (id: string, data: any) => api.put(`/channels/${id}`, data),
   delete: (id: string) => api.delete(`/channels/${id}`),
   test: (id: string) => api.post(`/channels/${id}/test`),
-  queryProducts: (id: string, skus: string[]) => api.post(`/channels/${id}/query-products`, { skus }),
+  queryProducts: (id: string, skus: string[], options?: { warehouseCode?: string; priceType?: 'shipping' | 'pickup' }) =>
+    api.post(`/channels/${id}/query-products`, { skus, ...options }),
+  testApi: (id: string, params: { endpoint: string; skus?: string[]; page?: number; pageSize?: number }) =>
+    api.post(`/channels/${id}/test-api`, params),
+  fetchWarehouses: (id: string) => api.post(`/channels/${id}/fetch-warehouses`),
+  getWarehouses: (id: string) => api.get(`/channels/${id}/warehouses`),
 };
 
 // 平台
@@ -41,6 +46,23 @@ export const shopApi = {
   update: (id: string, data: any) => api.put(`/shops/${id}`, data),
   delete: (id: string) => api.delete(`/shops/${id}`),
   test: (id: string) => api.post(`/shops/${id}/test`),
+  syncProducts: (id: string) => api.post(`/shops/${id}/sync-products`),
+  getSyncTaskStatus: (taskId: string) => api.get(`/shops/sync-task/${taskId}`),
+  deleteAllProducts: (id: string) => api.delete(`/shops/${id}/products`),
+  syncMissingSkus: (id: string, skus: string[]) => api.post(`/shops/${id}/sync-missing-skus`, { skus }),
+  syncToWalmart: (id: string, data: { productIds: string[]; syncType: 'price' | 'inventory' | 'both' }) =>
+    api.post(`/shops/${id}/sync-to-walmart`, data),
+  // Feed管理
+  getFeeds: (id: string, params?: any) => api.get(`/shops/${id}/feeds`, { params }),
+  refreshFeedStatus: (id: string, feedId: string) => api.post(`/shops/${id}/feeds/${feedId}/refresh`),
+  getFeedDetail: (id: string, feedId: string) => api.get(`/shops/${id}/feeds/${feedId}/detail`),
+  // 同步任务管理
+  getSyncTasks: (params?: any) => api.get('/shops/sync-tasks', { params }),
+  pauseSyncTask: (taskId: string) => api.post(`/shops/sync-task/${taskId}/pause`),
+  resumeSyncTask: (taskId: string) => api.post(`/shops/sync-task/${taskId}/resume`),
+  cancelSyncTask: (taskId: string, force?: boolean) => api.post(`/shops/sync-task/${taskId}/cancel`, null, { params: { force } }),
+  deleteSyncTask: (taskId: string) => api.delete(`/shops/sync-task/${taskId}`),
+  retrySyncTask: (taskId: string) => api.post(`/shops/sync-task/${taskId}/retry`),
 };
 
 // 同步规则
@@ -57,7 +79,19 @@ export const syncRuleApi = {
 
 // 商品
 export const productApi = {
-  list: (params?: any) => api.get('/products', { params }),
+  list: (params?: any) => {
+    // 如果有 skus 数组，转换为逗号分隔的字符串
+    if (params?.skus && Array.isArray(params.skus)) {
+      params = { ...params, skus: params.skus.join(',') };
+    }
+    return api.get('/products', { params });
+  },
+  export: (params?: any) => {
+    if (params?.skus && Array.isArray(params.skus)) {
+      params = { ...params, skus: params.skus.join(',') };
+    }
+    return api.get('/products/export', { params });
+  },
   get: (id: string) => api.get(`/products/${id}`),
   update: (id: string, data: any) => api.put(`/products/${id}`, data),
   delete: (id: string) => api.delete(`/products/${id}`),

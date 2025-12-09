@@ -501,6 +501,53 @@ LOG_LEVEL=debug
 - Redis >= 7.0
 - pnpm >= 8.0
 
+### 8.3 常用命令
+
+```bash
+# 安装依赖
+pnpm install
+
+# 启动开发服务（前后端同时启动）
+pnpm dev
+
+# 仅启动后端 (端口 5275)
+pnpm --filter api dev
+
+# 仅启动前端 (端口 5276)
+pnpm --filter web dev
+
+# 重启服务
+# 1. 在终端按 Ctrl+C 停止当前服务
+# 2. 如果修改了 Prisma Schema，先运行迁移和生成
+# 3. 重新运行 pnpm dev
+
+# 完整重启流程（修改数据库后）
+# Ctrl+C
+# cd apps/api && npx prisma migrate dev --name your_migration_name
+# cd apps/api && npx prisma generate  (如果上一步报权限错误)
+# pnpm dev
+
+# 数据库迁移
+pnpm --filter api prisma migrate dev
+
+# 生成 Prisma Client
+pnpm --filter api prisma generate
+
+# 重置数据库（清空所有数据）
+pnpm --filter api prisma migrate reset
+
+# 查看数据库（Prisma Studio）
+pnpm --filter api prisma studio
+```
+
+### 8.4 服务端口
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 后端 API | 5275 | NestJS 服务 |
+| 前端 Web | 5276 | Vite 开发服务器 |
+| PostgreSQL | 5432 | 数据库 |
+| Redis | 6379 | 缓存/队列 |
+
 ---
 
 ## 9. 扩展性设计

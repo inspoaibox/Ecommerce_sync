@@ -11,6 +11,7 @@ import {
   SearchOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
+  CloudSyncOutlined,
 } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
 
@@ -56,6 +57,8 @@ export default function Layout() {
       label: '平台店铺',
       children: [
         { key: '/shops/list', label: '店铺列表' },
+        { key: '/shops/sync-tasks', label: '同步记录' },
+        { key: '/shops/feed-status', icon: <CloudSyncOutlined />, label: 'Feed状态' },
         ...shops.map((shop) => ({
           key: `/shops/${shop.id}/products`,
           label: shop.name,
@@ -69,10 +72,20 @@ export default function Layout() {
   // 获取当前选中的菜单key
   const getSelectedKeys = () => {
     const path = location.pathname;
+    // 店铺商品页面
     if (path.includes('/shops/') && path.includes('/products')) {
       return [path];
     }
-    if (path.startsWith('/shops')) {
+    // 同步记录页面
+    if (path === '/shops/sync-tasks') {
+      return ['/shops/sync-tasks'];
+    }
+    // Feed状态页面
+    if (path === '/shops/feed-status') {
+      return ['/shops/feed-status'];
+    }
+    // 店铺列表页面
+    if (path === '/shops/list') {
       return ['/shops/list'];
     }
     return [path];

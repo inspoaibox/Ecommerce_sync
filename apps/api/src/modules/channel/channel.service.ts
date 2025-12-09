@@ -71,7 +71,11 @@ export class ChannelService {
     }
   }
 
-  async queryProducts(id: string, skus: string[]) {
+  async queryProducts(
+    id: string,
+    skus: string[],
+    options?: { warehouseCode?: string; priceType?: 'shipping' | 'pickup' }
+  ) {
     const channel = await this.findOne(id);
     try {
       const adapter = ChannelAdapterFactory.create(
@@ -79,7 +83,7 @@ export class ChannelService {
         channel.apiConfig as Record<string, any>,
       );
       // 使用适配器的批量查询方法
-      const products = await (adapter as any).fetchProductsBySkus(skus);
+      const products = await (adapter as any).fetchProductsBySkus(skus, undefined, options);
       return {
         success: true,
         data: products,
@@ -92,5 +96,89 @@ export class ChannelService {
         data: [],
       };
     }
+  }
+
+  async testApi(
+    id: string,
+    params: { endpoint: string; skus?: string[]; page?: number; pageSize?: number },
+  ) {
+    const channel = await this.findOne(id);
+    try {
+      const adapter = ChannelAdapterFactory.create(
+        channel.type,
+        channel.apiConfig as Record<string, any>,
+      );
+      // 调用适配器的原始API测试方法
+      const result = await (adapter as any).testRawApi(params);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : '请求失败',
+        data: null,
+      };
+    }
+  }
+
+  async fetchWarehouses(id: string) {
+    const channel = await this.findOne(id);
+    try {
+      const adapter = ChannelAdapterFactory.create(
+        channel.type,
+        channel.apiConfig as Record<string, any>,
+      );
+
+      // 只有赛盈云仓支持获取区域
+      if (channel.type !== 'saleyee') {
+        return {
+          success: false,
+          message: '该渠道不支持获取区域信息',
+        };
+      }
+
+      // 调用适配器获取区域列表
+      const warehouses = await (adapter as any).fetchWarehouses();
+
+      // 删除旧的区域数据
+      await this.prisma.channelWarehouse.deleteMany({
+        where: { channelId: id },
+      });
+
+      // 保存新的区域数据
+      await this.prisma.channelWarehouse.createMany({
+        data: warehouses.map((w: any) => ({
+          channelId: id,
+          warehouseCode: w.code,
+          warehouseName: w.name,
+          region: w.region,
+          country: w.country,
+          extraData: w.extraData,
+        })),
+      });
+
+      return {
+        success: true,
+        message: `成功获取并保存 ${warehouses.length} 个区域`,
+        count: warehouses.length,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : '获取区域失败',
+      };
+    }
+  }
+
+  async getWarehouses(id: string) {
+    const warehouses = await this.prisma.channelWarehouse.findMany({
+      where: { channelId: id },
+      orderBy: { warehouseCode: 'asc' },
+    });
+
+    return {
+      success: true,
+      data: warehouses,
+      total: warehouses.length,
+    };
   }
 }

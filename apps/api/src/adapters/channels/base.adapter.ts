@@ -2,7 +2,7 @@ export interface ChannelProduct {
   channelProductId: string;
   sku: string;
   title: string;
-  price: number;
+  price: number | null;
   stock: number;
   currency?: string;
   extraFields?: Record<string, any>;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Table, Button, Space, Modal, Form, Input, Select, message, Popconfirm, Tag } from 'antd';
-import { PlusOutlined, ApiOutlined } from '@ant-design/icons';
+import { PlusOutlined, ApiOutlined, SyncOutlined } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
 
 // 预设平台配置
@@ -24,6 +24,8 @@ const PLATFORM_PRESETS: Record<string, {
     fields: [
       { key: 'clientId', label: 'Client ID', required: true, placeholder: '请输入Walmart Client ID' },
       { key: 'clientSecret', label: 'Client Secret', required: true, placeholder: '请输入Walmart Client Secret', type: 'password' },
+      { key: 'accessToken', label: 'Access Token', required: false, placeholder: '首次授权后自动获取（可选）', type: 'password' },
+      { key: 'refreshToken', label: 'Refresh Token', required: false, placeholder: '用于刷新Access Token（可选）', type: 'password' },
     ],
   },
   amazon: {
@@ -108,6 +110,7 @@ export default function ShopList() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('');
   const [form] = Form.useForm();
   const { refreshShops } = useOutletContext<{ refreshShops: () => void }>();
+  const navigate = useNavigate();
 
   useEffect(() => { loadData(); }, []);
 
@@ -220,6 +223,21 @@ export default function ShopList() {
     }
   };
 
+  const handleSyncProducts = async (id: string) => {
+    try {
+      const res: any = await shopApi.syncProducts(id);
+      if (res.success) {
+        message.success('同步任务已创建');
+        // 跳转到同步记录页面
+        navigate('/shops/sync-tasks');
+      } else {
+        message.error(res.message || '启动同步失败');
+      }
+    } catch (e: any) {
+      message.error(e.message || '启动同步失败');
+    }
+  };
+
   const handleOpenModal = () => {
     setEditingId(null);
     setSelectedPlatform('');
@@ -241,13 +259,16 @@ export default function ShopList() {
     },
     { title: '区域', dataIndex: 'region', key: 'region' },
     { title: '状态', dataIndex: 'status', key: 'status', render: (s: string) => <Tag color={s === 'active' ? 'green' : 'default'}>{s === 'active' ? '启用' : '禁用'}</Tag> },
-    { title: '操作', key: 'action', width: 200, render: (_: any, record: any) => (
+    { title: '操作', key: 'action', width: 280, render: (_: any, record: any) => (
       <Space>
         <Button type="link" size="small" onClick={() => handleEdit(record)}>编辑</Button>
         <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id)}>
           <Button type="link" size="small" danger>删除</Button>
         </Popconfirm>
         <Button type="link" size="small" icon={<ApiOutlined />} onClick={() => handleTest(record.id)}>测试</Button>
+        <Popconfirm title="确定从平台同步商品到本地？" onConfirm={() => handleSyncProducts(record.id)}>
+          <Button type="link" size="small" icon={<SyncOutlined />}>同步商品</Button>
+        </Popconfirm>
       </Space>
     )},
   ];
@@ -327,6 +348,7 @@ export default function ShopList() {
           </Form.Item>
         </Form>
       </Modal>
+
     </div>
   );
 }

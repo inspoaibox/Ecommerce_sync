@@ -54,9 +54,28 @@ model Channel {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  syncRules SyncRule[]
+  syncRules  SyncRule[]
+  warehouses ChannelWarehouse[]
 
   @@map("channels")
+}
+
+// 渠道区域表 - 存储渠道的仓库/区域信息
+model ChannelWarehouse {
+  id            String   @id @default(uuid())
+  channelId     String   @map("channel_id")
+  warehouseCode String   @map("warehouse_code") @db.VarChar(50)
+  warehouseName String   @map("warehouse_name") @db.VarChar(100)
+  region        String?  @db.VarChar(50)
+  country       String?  @db.VarChar(50)
+  extraData     Json?    @map("extra_data")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, warehouseCode])
+  @@map("channel_warehouses")
 }
 
 // 平台表 - 电商平台
@@ -88,9 +107,11 @@ model Shop {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  platform  Platform   @relation(fields: [platformId], references: [id])
-  syncRules SyncRule[]
-  products  Product[]
+  platform    Platform       @relation(fields: [platformId], references: [id])
+  syncRules   SyncRule[]
+  products    Product[]
+  syncTasks   ShopSyncTask[]
+  feedRecords FeedRecord[]
 
   @@map("shops")
 }
@@ -135,6 +156,8 @@ model Product {
   finalPrice        Decimal    @map("final_price") @db.Decimal(10, 2)
   originalStock     Int        @map("original_stock")
   finalStock        Int        @map("final_stock")
+  localPrice        Decimal?   @map("local_price") @db.Decimal(10, 2)
+  localStock        Int?       @map("local_stock")
   currency          String     @default("USD") @db.VarChar(10)
   extraFields       Json?      @map("extra_fields")
   platformProductId String?    @map("platform_product_id") @db.VarChar(100)
@@ -147,7 +170,7 @@ model Product {
   syncRule SyncRule? @relation(fields: [syncRuleId], references: [id])
   shop     Shop?     @relation(fields: [shopId], references: [id])
 
-  @@unique([sourceChannel, sku])
+  @@unique([shopId, sourceChannel, sku])
   @@map("products")
 }
 
@@ -170,4 +193,72 @@ model SyncLog {
   syncRule SyncRule @relation(fields: [syncRuleId], references: [id])
 
   @@map("sync_logs")
+}
+
+enum ShopSyncTaskStatus {
+  pending
+  running
+  paused
+  completed
+  failed
+  cancelled
+}
+
+// 店铺商品同步任务表
+model ShopSyncTask {
+  id           String             @id @default(uuid())
+  shopId       String             @map("shop_id")
+  shopName     String             @map("shop_name") @db.VarChar(100)
+  status       ShopSyncTaskStatus @default(pending)
+  progress     Int                @default(0)
+  total        Int                @default(0)
+  created      Int                @default(0)
+  updated      Int                @default(0)
+  skipped      Int                @default(0)
+  createdSkus  Json?              @map("created_skus")
+  updatedSkus  Json?              @map("updated_skus")
+  skippedSkus  Json?              @map("skipped_skus")
+  errorMessage String?            @map("error_message") @db.Text
+  startedAt    DateTime           @default(now()) @map("started_at")
+  finishedAt   DateTime?          @map("finished_at")
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("shop_sync_tasks")
+}
+
+enum FeedStatus {
+  RECEIVED
+  INPROGRESS
+  PROCESSED
+  ERROR
+}
+
+enum FeedSyncType {
+  price
+  inventory
+  both
+}
+
+// Feed同步记录表 - 跟踪沃尔玛Feed状态
+model FeedRecord {
+  id           String       @id @default(uuid())
+  shopId       String       @map("shop_id")
+  feedId       String       @map("feed_id") @db.VarChar(100)
+  syncType     FeedSyncType @map("sync_type")
+  itemCount    Int          @default(0) @map("item_count")
+  status       FeedStatus   @default(RECEIVED)
+  successCount Int          @default(0) @map("success_count")
+  failCount    Int          @default(0) @map("fail_count")
+  errorMessage String?      @map("error_message") @db.Text
+  feedDetail   Json?        @map("feed_detail")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  completedAt  DateTime?    @map("completed_at")
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, feedId])
+  @@map("feed_records")
 }

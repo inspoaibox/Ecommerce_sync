@@ -15,6 +15,48 @@ export class ShopController {
     return this.shopService.findAll(query);
   }
 
+  @Get('sync-tasks')
+  @ApiOperation({ summary: '获取所有同步任务列表' })
+  getSyncTasks(@Query() query: PaginationDto & { shopId?: string }) {
+    return this.shopService.getSyncTasks(query);
+  }
+
+  @Get('sync-task/:taskId')
+  @ApiOperation({ summary: '获取同步任务状态' })
+  getSyncTaskStatus(@Param('taskId') taskId: string) {
+    return this.shopService.getSyncTaskStatus(taskId);
+  }
+
+  @Post('sync-task/:taskId/pause')
+  @ApiOperation({ summary: '暂停同步任务' })
+  pauseSyncTask(@Param('taskId') taskId: string) {
+    return this.shopService.pauseSyncTask(taskId);
+  }
+
+  @Post('sync-task/:taskId/resume')
+  @ApiOperation({ summary: '继续同步任务' })
+  resumeSyncTask(@Param('taskId') taskId: string) {
+    return this.shopService.resumeSyncTask(taskId);
+  }
+
+  @Post('sync-task/:taskId/cancel')
+  @ApiOperation({ summary: '取消同步任务' })
+  cancelSyncTask(@Param('taskId') taskId: string, @Query('force') force?: string) {
+    return this.shopService.cancelSyncTask(taskId, force === 'true');
+  }
+
+  @Delete('sync-task/:taskId')
+  @ApiOperation({ summary: '删除同步任务记录' })
+  deleteSyncTask(@Param('taskId') taskId: string) {
+    return this.shopService.deleteSyncTask(taskId);
+  }
+
+  @Post('sync-task/:taskId/retry')
+  @ApiOperation({ summary: '重试失败的同步任务' })
+  retrySyncTask(@Param('taskId') taskId: string) {
+    return this.shopService.retrySyncTask(taskId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '获取店铺详情' })
   findOne(@Param('id') id: string) {
@@ -43,5 +85,50 @@ export class ShopController {
   @ApiOperation({ summary: '测试店铺连接' })
   testConnection(@Param('id') id: string) {
     return this.shopService.testConnection(id);
+  }
+
+  @Post(':id/sync-products')
+  @ApiOperation({ summary: '从平台同步商品到本地（异步）' })
+  syncProducts(@Param('id') id: string) {
+    return this.shopService.syncProducts(id);
+  }
+
+  @Delete(':id/products')
+  @ApiOperation({ summary: '删除店铺所有商品' })
+  deleteAllProducts(@Param('id') id: string) {
+    return this.shopService.deleteAllProducts(id);
+  }
+
+  @Post(':id/sync-missing-skus')
+  @ApiOperation({ summary: '补充同步缺失的SKU' })
+  syncMissingSkus(@Param('id') id: string, @Body() body: { skus: string[] }) {
+    return this.shopService.syncMissingSkus(id, body.skus);
+  }
+
+  @Post(':id/sync-to-walmart')
+  @ApiOperation({ summary: '同步价格/库存到沃尔玛' })
+  syncToWalmart(
+    @Param('id') id: string,
+    @Body() body: { productIds: string[]; syncType: 'price' | 'inventory' | 'both' }
+  ) {
+    return this.shopService.syncToWalmart(id, body.productIds, body.syncType);
+  }
+
+  @Get(':id/feeds')
+  @ApiOperation({ summary: '获取店铺Feed记录列表' })
+  getFeeds(@Param('id') id: string, @Query() query: PaginationDto) {
+    return this.shopService.getFeeds(id, query);
+  }
+
+  @Post(':id/feeds/:feedId/refresh')
+  @ApiOperation({ summary: '刷新Feed状态' })
+  refreshFeedStatus(@Param('id') id: string, @Param('feedId') feedId: string) {
+    return this.shopService.refreshFeedStatus(id, feedId);
+  }
+
+  @Get(':id/feeds/:feedId/detail')
+  @ApiOperation({ summary: '获取Feed详情' })
+  getFeedDetail(@Param('id') id: string, @Param('feedId') feedId: string) {
+    return this.shopService.getFeedDetail(id, feedId);
   }
 }

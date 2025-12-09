@@ -47,7 +47,34 @@ export class ChannelController {
 
   @Post(':id/query-products')
   @ApiOperation({ summary: '批量查询商品' })
-  queryProducts(@Param('id') id: string, @Body() body: { skus: string[] }) {
-    return this.channelService.queryProducts(id, body.skus);
+  queryProducts(
+    @Param('id') id: string,
+    @Body() body: { skus: string[]; warehouseCode?: string; priceType?: 'shipping' | 'pickup' }
+  ) {
+    return this.channelService.queryProducts(id, body.skus, {
+      warehouseCode: body.warehouseCode,
+      priceType: body.priceType,
+    });
+  }
+
+  @Post(':id/test-api')
+  @ApiOperation({ summary: '测试渠道API接口' })
+  testApi(
+    @Param('id') id: string,
+    @Body() body: { endpoint: string; skus?: string[]; page?: number; pageSize?: number },
+  ) {
+    return this.channelService.testApi(id, body);
+  }
+
+  @Post(':id/fetch-warehouses')
+  @ApiOperation({ summary: '获取并保存渠道区域信息' })
+  fetchWarehouses(@Param('id') id: string) {
+    return this.channelService.fetchWarehouses(id);
+  }
+
+  @Get(':id/warehouses')
+  @ApiOperation({ summary: '获取渠道区域列表' })
+  getWarehouses(@Param('id') id: string) {
+    return this.channelService.getWarehouses(id);
   }
 }

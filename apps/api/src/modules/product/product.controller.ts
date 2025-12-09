@@ -14,6 +14,12 @@ export class ProductController {
     return this.productService.findAll(query);
   }
 
+  @Get('export')
+  @ApiOperation({ summary: '导出商品（不受分页限制）' })
+  exportProducts(@Query() query: ProductQueryDto) {
+    return this.productService.exportProducts(query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '获取商品详情' })
   findOne(@Param('id') id: string) {

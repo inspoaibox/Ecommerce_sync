@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Table, Button, Space, Modal, Form, Input, Select, message, Popconfirm, Tag } from 'antd';
-import { PlusOutlined, ApiOutlined } from '@ant-design/icons';
+import { PlusOutlined, ApiOutlined, BugOutlined } from '@ant-design/icons';
 import { channelApi } from '@/services/api';
 
 // 预设渠道类型配置
@@ -19,10 +20,19 @@ const CHANNEL_PRESETS: Record<string, {
       { key: 'clientSecret', label: 'Client Secret', required: true, placeholder: '请输入Client Secret' },
     ],
   },
-  // 后续可以添加更多渠道类型
+  saleyee: {
+    name: '赛盈云仓',
+    code: 'saleyee',
+    apiBaseUrl: 'https://api.saleyee.com',
+    fields: [
+      { key: 'token', label: 'Token', required: true, placeholder: '请输入Token' },
+      { key: 'key', label: 'Key', required: true, placeholder: '请输入Key（用于DES加密）' },
+    ],
+  },
 };
 
 export default function ChannelList() {
+  const navigate = useNavigate();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -151,13 +161,14 @@ export default function ChannelList() {
     { title: '编码', dataIndex: 'code', key: 'code' },
     { title: '类型', dataIndex: 'type', key: 'type', render: (t: string) => CHANNEL_PRESETS[t]?.name || t },
     { title: '状态', dataIndex: 'status', key: 'status', render: (s: string) => <Tag color={s === 'active' ? 'green' : 'default'}>{s === 'active' ? '启用' : '禁用'}</Tag> },
-    { title: '操作', key: 'action', width: 200, render: (_: any, record: any) => (
+    { title: '操作', key: 'action', width: 280, render: (_: any, record: any) => (
       <Space>
         <Button type="link" size="small" onClick={() => handleEdit(record)}>编辑</Button>
         <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id)}>
           <Button type="link" size="small" danger>删除</Button>
         </Popconfirm>
         <Button type="link" size="small" icon={<ApiOutlined />} onClick={() => handleTest(record.id)}>测试</Button>
+        <Button type="link" size="small" icon={<BugOutlined />} onClick={() => navigate(`/channels/${record.id}/test`)}>API调试</Button>
       </Space>
     )},
   ];
@@ -181,13 +192,13 @@ export default function ChannelList() {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="type" label="渠道类型" rules={[{ required: true, message: '请选择渠道类型' }]}>
-            <Select 
+            <Select
               placeholder="请选择渠道类型"
               onChange={handleTypeChange}
               options={[
                 { value: 'gigacloud', label: '大健云仓 (GigaCloud)' },
-                // 后续添加更多渠道类型
-              ]} 
+                { value: 'saleyee', label: '赛盈云仓 (Saleyee)' },
+              ]}
             />
           </Form.Item>
           

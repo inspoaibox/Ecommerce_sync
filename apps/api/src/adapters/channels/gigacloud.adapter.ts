@@ -143,7 +143,7 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
     };
   }
 
-  // 批量查询SKU的价格和库存
+  // 批量查询SKU的价格和库存（不调用商品详情接口）
   async fetchProductsBySkus(skus: string[]): Promise<ChannelProduct[]> {
     if (skus.length === 0) return [];
 
@@ -152,40 +152,57 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
     const allProducts: ChannelProduct[] = [];
 
     for (const chunk of chunks) {
-      const [priceResult, inventoryResult, detailResult] = await Promise.all([
+      // 只调用价格和库存接口
+      const [priceResult, inventoryResult] = await Promise.all([
         this.fetchPrices(chunk),
         this.fetchInventory(chunk),
-        this.fetchDetails(chunk),
       ]);
 
-      const priceMap = new Map(priceResult.map(p => [p.sku, p]));
+      // 同一个SKU可能返回多条记录（不同卖家），只保留skuAvailable=true的记录
+      const priceMap = new Map<string, PriceData>();
+      for (const p of priceResult) {
+        // 优先保留 skuAvailable=true 的记录
+        const existing = priceMap.get(p.sku);
+        if (!existing || (p.skuAvailable && !existing.skuAvailable)) {
+          priceMap.set(p.sku, p);
+        }
+      }
+
       const inventoryMap = new Map(inventoryResult.map(i => [i.sku, i]));
-      const detailMap = new Map(detailResult.map(d => [d.sku, d]));
 
       for (const sku of chunk) {
         const price = priceMap.get(sku);
         const inventory = inventoryMap.get(sku);
-        const detail = detailMap.get(sku);
 
-        if (price && price.skuAvailable) {
-          allProducts.push({
-            channelProductId: sku,
-            sku,
-            title: detail?.name || sku,
-            price: price.discountedPrice || price.price || 0,
-            stock: inventory?.sellerInventoryInfo?.sellerAvailableInventory || 0,
-            currency: price.currency || 'USD',
-            extraFields: {
-              shippingFee: price.shippingFee,
-              mapPrice: price.mapPrice,
-              buyerStock: inventory?.buyerInventoryInfo?.totalBuyerAvailableInventory || 0,
-              weight: detail?.weight,
-              weightUnit: detail?.weightUnit,
-              mainImageUrl: detail?.mainImageUrl,
-              category: detail?.category,
-            },
-          });
+        // 调试日志：记录每个SKU的查询结果
+        console.log(`[GigaCloud] SKU: ${sku}, hasPrice: ${!!price}, skuAvailable: ${price?.skuAvailable}`);
+
+        // 返回所有查询的SKU，包括价格不存在或不可用的商品
+        let availabilityStatus = 'available';
+        if (!price) {
+          availabilityStatus = 'no_price_data';
+        } else if (!price.skuAvailable) {
+          availabilityStatus = 'unavailable';
+        } else if (price.price == null) {
+          availabilityStatus = 'price_not_exist';
         }
+
+        allProducts.push({
+          channelProductId: sku,
+          sku,
+          title: sku, // 不调用详情接口，使用SKU作为标题
+          price: price?.price ?? null, // 原价，可能为null
+          stock: inventory?.sellerInventoryInfo?.sellerAvailableInventory || 0,
+          currency: price?.currency || 'USD',
+          extraFields: {
+            shippingFee: price?.shippingFee ?? null,
+            mapPrice: price?.mapPrice ?? null,
+            discountedPrice: price?.discountedPrice ?? null, // 优惠价格
+            buyerStock: inventory?.buyerInventoryInfo?.totalBuyerAvailableInventory || 0,
+            skuAvailable: price?.skuAvailable ?? false,
+            availabilityStatus, // 新增状态字段
+          },
+        });
       }
     }
 
@@ -233,5 +250,43 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
       chunks.push(array.slice(i, i + size));
     }
     return chunks;
+  }
+
+  // 原始API测试方法 - 返回API原始响应
+  async testRawApi(params: {
+    endpoint: string;
+    skus?: string[];
+    page?: number;
+    pageSize?: number;
+  }): Promise<any> {
+    const { endpoint, skus = [], page = 1, pageSize = 20 } = params;
+
+    switch (endpoint) {
+      case 'price':
+        return this.request<any>('POST', '/api-b2b-v1/product/price', { skus });
+
+      case 'inventory':
+        return this.request<any>('POST', '/api-b2b-v1/inventory/quantity-query', { skus });
+
+      case 'detail':
+        return this.request<any>('POST', '/api-b2b-v1/product/detailInfo', { skus });
+
+      case 'skuList': {
+        const token = await this.getAccessToken();
+        const queryParams = new URLSearchParams({
+          page: page.toString(),
+          limit: pageSize.toString(),
+          sort: '2',
+        });
+        const url = `${this.baseUrl}/api-b2b-v1/product/skus?${queryParams}`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return response.json();
+      }
+
+      default:
+        throw new Error(`未知的接口类型: ${endpoint}`);
+    }
   }
 }

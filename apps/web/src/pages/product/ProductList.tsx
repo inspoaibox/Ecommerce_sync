@@ -32,17 +32,20 @@ export default function ProductList() {
   const loadProducts = async (page = 1, pageSize = 20) => {
     setLoading(true);
     try {
-      const res: any = await productApi.list({
-        page,
-        pageSize,
-        keyword: filters.keyword,
-        shopId: filters.shopId,
-      });
+      const params: any = { page, pageSize };
+      if (filters.keyword) params.keyword = filters.keyword;
+      if (filters.shopId) params.shopId = filters.shopId;
+      
+      const res: any = await productApi.list(params);
       setData(res.data || []);
       setPagination({ current: page, pageSize, total: res.total || 0 });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      message.error('加载商品失败');
+      // 如果是空数据，不显示错误
+      if (e.message !== '请求失败') {
+        message.error('加载商品失败');
+      }
+      setData([]);
     } finally {
       setLoading(false);
     }
@@ -97,27 +100,28 @@ export default function ProductList() {
   const columns = [
     { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 150 },
     { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true, width: 250 },
-    { title: '价格', dataIndex: 'price', key: 'price', width: 100,
-      render: (v: number) => v != null ? `$${v.toFixed(2)}` : '-' },
-    { title: '库存', dataIndex: 'stock', key: 'stock', width: 80 },
-    { 
-      title: '所属店铺', 
-      dataIndex: 'shop', 
-      key: 'shop', 
+    { title: '本地价格', dataIndex: 'localPrice', key: 'localPrice', width: 100,
+      render: (v: number) => v != null ? `$${Number(v).toFixed(2)}` : '-' },
+    { title: '本地库存', dataIndex: 'localStock', key: 'localStock', width: 80,
+      render: (v: number) => v ?? '-' },
+    {
+      title: '所属店铺',
+      dataIndex: 'shop',
+      key: 'shop',
       width: 150,
       render: (shop: any) => shop ? <Tag color="blue">{shop.name}</Tag> : <Tag>未分配</Tag>
     },
-    { 
-      title: '来源渠道', 
-      dataIndex: 'sourceChannel', 
-      key: 'sourceChannel', 
+    {
+      title: '来源渠道',
+      dataIndex: 'sourceChannel',
+      key: 'sourceChannel',
       width: 120,
       render: (v: string) => v || '-'
     },
-    { 
-      title: '同步时间', 
-      dataIndex: 'updatedAt', 
-      key: 'updatedAt', 
+    {
+      title: '同步时间',
+      dataIndex: 'updatedAt',
+      key: 'updatedAt',
       width: 180,
       render: (v: string) => v ? new Date(v).toLocaleString() : '-'
     },
@@ -126,9 +130,9 @@ export default function ProductList() {
       key: 'action',
       width: 100,
       render: (_: any, record: any) => (
-        <Button 
-          type="link" 
-          danger 
+        <Button
+          type="link"
+          danger
           size="small"
           icon={<DeleteOutlined />}
           onClick={() => handleDelete([record.id])}

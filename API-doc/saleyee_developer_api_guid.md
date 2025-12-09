@@ -27,7 +27,7 @@
 
 指定接口的 URL
 
-正式：https://api.saleyee.cn/
+正式：https://api.saleyee.com/
 
 ## 操作类型
 

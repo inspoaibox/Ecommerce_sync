@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsUUID, IsNumber, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsUUID, IsNumber, IsObject, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { SyncStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -79,6 +79,11 @@ export class ProductQueryDto extends PaginationDto {
   @IsString()
   sku?: string;
 
+  @ApiPropertyOptional({ description: '批量SKU搜索，逗号分隔' })
+  @IsOptional()
+  @IsString()
+  skus?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -112,6 +117,7 @@ export class SyncFromChannelDto {
   channelId: string;
 
   @ApiProperty({ type: [Object] })
+  @IsArray()
   products: any[];
 
   @ApiPropertyOptional()
