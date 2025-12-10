@@ -7,6 +7,250 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Channel {
+  id          String             @id @default(uuid())
+  name        String             @db.VarChar(100)
+  code        String             @unique @db.VarChar(50)
+  type        String             @db.VarChar(50)
+  apiConfig   Json               @map("api_config")
+  description String?
+  status      Status             @default(active)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  warehouses  ChannelWarehouse[]
+  products    Product[]
+  syncRules   SyncRule[]
+
+  @@map("channels")
+}
+
+model ChannelWarehouse {
+  id            String   @id @default(uuid())
+  channelId     String   @map("channel_id")
+  warehouseCode String   @map("warehouse_code") @db.VarChar(50)
+  warehouseName String   @map("warehouse_name") @db.VarChar(100)
+  region        String?  @db.VarChar(50)
+  country       String?  @db.VarChar(50)
+  extraData     Json?    @map("extra_data")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  channel       Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, warehouseCode])
+  @@map("channel_warehouses")
+}
+
+model Platform {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  code        String   @unique @db.VarChar(50)
+  apiBaseUrl  String?  @map("api_base_url") @db.VarChar(255)
+  description String?
+  status      Status   @default(active)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  shops       Shop[]
+
+  @@map("platforms")
+}
+
+model Shop {
+  id             String          @id @default(uuid())
+  platformId     String          @map("platform_id")
+  name           String          @db.VarChar(100)
+  code           String          @unique @db.VarChar(50)
+  apiCredentials Json            @map("api_credentials")
+  region         String?         @db.VarChar(50)
+  description    String?
+  status         Status          @default(active)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  syncConfig     Json?           @map("sync_config")
+  autoSyncConfig AutoSyncConfig?
+  autoSyncTasks  AutoSyncTask[]
+  feedRecords    FeedRecord[]
+  operationLogs  OperationLog[]
+  products       Product[]
+  syncTasks      ShopSyncTask[]
+  platform       Platform        @relation(fields: [platformId], references: [id])
+  syncRules      SyncRule[]
+
+  @@map("shops")
+}
+
+model SyncRule {
+  id              String         @id @default(uuid())
+  name            String         @db.VarChar(100)
+  channelId       String         @map("channel_id")
+  shopId          String         @map("shop_id")
+  syncType        SyncType       @default(incremental) @map("sync_type")
+  intervalDays    Int            @default(1) @map("interval_days")
+  priceMultiplier Decimal        @default(1.0) @map("price_multiplier") @db.Decimal(10, 4)
+  priceAdjustment Decimal        @default(0) @map("price_adjustment") @db.Decimal(10, 2)
+  stockMultiplier Decimal        @default(1.0) @map("stock_multiplier") @db.Decimal(10, 4)
+  stockAdjustment Int            @default(0) @map("stock_adjustment")
+  fieldMapping    Json?          @map("field_mapping")
+  lastSyncAt      DateTime?      @map("last_sync_at")
+  nextSyncAt      DateTime?      @map("next_sync_at")
+  status          SyncRuleStatus @default(active)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  products        Product[]
+  syncLogs        SyncLog[]
+  channel         Channel        @relation(fields: [channelId], references: [id])
+  shop            Shop           @relation(fields: [shopId], references: [id])
+
+  @@map("sync_rules")
+}
+
+model Product {
+  id                String     @id @default(uuid())
+  syncRuleId        String?    @map("sync_rule_id")
+  shopId            String?    @map("shop_id")
+  channelProductId  String     @map("channel_product_id") @db.VarChar(100)
+  sku               String     @db.VarChar(100)
+  title             String     @db.VarChar(500)
+  originalPrice     Decimal    @map("original_price") @db.Decimal(10, 2)
+  finalPrice        Decimal    @map("final_price") @db.Decimal(10, 2)
+  originalStock     Int        @map("original_stock")
+  finalStock        Int        @map("final_stock")
+  currency          String     @default("USD") @db.VarChar(10)
+  extraFields       Json?      @map("extra_fields")
+  platformProductId String?    @map("platform_product_id") @db.VarChar(100)
+  sourceChannel     String?    @map("source_channel") @db.VarChar(100)
+  syncStatus        SyncStatus @default(pending) @map("sync_status")
+  lastSyncAt        DateTime?  @map("last_sync_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+  localPrice        Decimal?   @map("local_price") @db.Decimal(10, 2)
+  localStock        Int?       @map("local_stock")
+  channelId         String?    @map("channel_id")
+  platformSku       String?    @map("platform_sku") @db.VarChar(100)
+  channel           Channel?   @relation(fields: [channelId], references: [id])
+  shop              Shop?      @relation(fields: [shopId], references: [id])
+  syncRule          SyncRule?  @relation(fields: [syncRuleId], references: [id])
+
+  @@unique([shopId, sourceChannel, sku])
+  @@map("products")
+}
+
+model SyncLog {
+  id           String        @id @default(uuid())
+  syncRuleId   String        @map("sync_rule_id")
+  syncType     SyncType      @map("sync_type")
+  triggerType  TriggerType   @map("trigger_type")
+  startedAt    DateTime      @default(now()) @map("started_at")
+  finishedAt   DateTime?     @map("finished_at")
+  totalCount   Int           @default(0) @map("total_count")
+  successCount Int           @default(0) @map("success_count")
+  failCount    Int           @default(0) @map("fail_count")
+  status       SyncLogStatus @default(running)
+  errorMessage String?       @map("error_message")
+  details      Json?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  syncRule     SyncRule      @relation(fields: [syncRuleId], references: [id])
+
+  @@map("sync_logs")
+}
+
+model ShopSyncTask {
+  id           String             @id @default(uuid())
+  shopId       String             @map("shop_id")
+  shopName     String             @map("shop_name") @db.VarChar(100)
+  status       ShopSyncTaskStatus @default(pending)
+  progress     Int                @default(0)
+  total        Int                @default(0)
+  created      Int                @default(0)
+  updated      Int                @default(0)
+  skipped      Int                @default(0)
+  errorMessage String?            @map("error_message")
+  startedAt    DateTime           @default(now()) @map("started_at")
+  finishedAt   DateTime?          @map("finished_at")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  createdSkus  Json?              @map("created_skus")
+  skippedSkus  Json?              @map("skipped_skus")
+  updatedSkus  Json?              @map("updated_skus")
+  shop         Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("shop_sync_tasks")
+}
+
+model AutoSyncConfig {
+  id           String    @id @default(uuid())
+  shopId       String    @unique @map("shop_id")
+  enabled      Boolean   @default(false)
+  intervalDays Int       @default(1) @map("interval_days")
+  syncType     String    @default("both") @map("sync_type")
+  lastSyncAt   DateTime? @map("last_sync_at")
+  nextSyncAt   DateTime? @map("next_sync_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  syncHour     Int       @default(8) @map("sync_hour")
+  shop         Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("auto_sync_configs")
+}
+
+model AutoSyncTask {
+  id             String        @id @default(uuid())
+  shopId         String        @map("shop_id")
+  syncType       String        @default("both") @map("sync_type")
+  stage          AutoSyncStage @default(fetch_channel)
+  channelStats   Json?         @map("channel_stats")
+  localUpdated   Int           @default(0) @map("local_updated")
+  platformFeedId String?       @map("platform_feed_id")
+  platformStatus String?       @map("platform_status")
+  totalProducts  Int           @default(0) @map("total_products")
+  successCount   Int           @default(0) @map("success_count")
+  failCount      Int           @default(0) @map("fail_count")
+  errorMessage   String?       @map("error_message")
+  startedAt      DateTime      @default(now()) @map("started_at")
+  finishedAt     DateTime?     @map("finished_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  shop           Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("auto_sync_tasks")
+}
+
+model OperationLog {
+  id         String    @id @default(uuid())
+  shopId     String?   @map("shop_id")
+  type       String    @db.VarChar(50)
+  status     String    @default("running") @db.VarChar(20)
+  total      Int       @default(0)
+  processed  Int       @default(0)
+  success    Int       @default(0)
+  failed     Int       @default(0)
+  message    String?
+  detail     Json?
+  startedAt  DateTime  @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  shop       Shop?     @relation(fields: [shopId], references: [id])
+
+  @@map("operation_logs")
+}
+
+model FeedRecord {
+  id           String       @id @default(uuid())
+  shopId       String       @map("shop_id")
+  feedId       String       @map("feed_id") @db.VarChar(100)
+  syncType     FeedSyncType @map("sync_type")
+  itemCount    Int          @default(0) @map("item_count")
+  status       FeedStatus   @default(RECEIVED)
+  successCount Int          @default(0) @map("success_count")
+  failCount    Int          @default(0) @map("fail_count")
+  errorMessage String?      @map("error_message")
+  feedDetail   Json?        @map("feed_detail")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  completedAt  DateTime?    @map("completed_at")
+  shop         Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, feedId])
+  @@map("feed_records")
+}
+
 enum Status {
   active
   inactive
@@ -41,168 +285,6 @@ enum TriggerType {
   manual
 }
 
-
-// 渠道表 - 数据来源
-model Channel {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)
-  code        String   @unique @db.VarChar(50)
-  type        String   @db.VarChar(50)
-  apiConfig   Json     @map("api_config")
-  description String?  @db.Text
-  status      Status   @default(active)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  syncRules  SyncRule[]
-  warehouses ChannelWarehouse[]
-  products   Product[]
-
-  @@map("channels")
-}
-
-// 渠道区域表 - 存储渠道的仓库/区域信息
-model ChannelWarehouse {
-  id            String   @id @default(uuid())
-  channelId     String   @map("channel_id")
-  warehouseCode String   @map("warehouse_code") @db.VarChar(50)
-  warehouseName String   @map("warehouse_name") @db.VarChar(100)
-  region        String?  @db.VarChar(50)
-  country       String?  @db.VarChar(50)
-  extraData     Json?    @map("extra_data")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-
-  @@unique([channelId, warehouseCode])
-  @@map("channel_warehouses")
-}
-
-// 平台表 - 电商平台
-model Platform {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)
-  code        String   @unique @db.VarChar(50)
-  apiBaseUrl  String?  @map("api_base_url") @db.VarChar(255)
-  description String?  @db.Text
-  status      Status   @default(active)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  shops Shop[]
-
-  @@map("platforms")
-}
-
-// 店铺表 - 目标店铺
-model Shop {
-  id             String   @id @default(uuid())
-  platformId     String   @map("platform_id")
-  name           String   @db.VarChar(100)
-  code           String   @unique @db.VarChar(50)
-  apiCredentials Json     @map("api_credentials")
-  syncConfig     Json?    @map("sync_config") // 同步规则配置（价格倍率、库存倍率等）
-  region         String?  @db.VarChar(50)
-  description    String?  @db.Text
-  status         Status   @default(active)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  platform       Platform        @relation(fields: [platformId], references: [id])
-  syncRules      SyncRule[]
-  products       Product[]
-  syncTasks      ShopSyncTask[]
-  feedRecords    FeedRecord[]
-  autoSyncConfig AutoSyncConfig?
-  autoSyncTasks  AutoSyncTask[]
-  operationLogs  OperationLog[]
-
-  @@map("shops")
-}
-
-
-// 同步规则表
-model SyncRule {
-  id              String         @id @default(uuid())
-  name            String         @db.VarChar(100)
-  channelId       String         @map("channel_id")
-  shopId          String         @map("shop_id")
-  syncType        SyncType       @default(incremental) @map("sync_type")
-  intervalDays    Int            @default(1) @map("interval_days")
-  priceMultiplier Decimal        @default(1.0) @map("price_multiplier") @db.Decimal(10, 4)
-  priceAdjustment Decimal        @default(0) @map("price_adjustment") @db.Decimal(10, 2)
-  stockMultiplier Decimal        @default(1.0) @map("stock_multiplier") @db.Decimal(10, 4)
-  stockAdjustment Int            @default(0) @map("stock_adjustment")
-  fieldMapping    Json?          @map("field_mapping")
-  lastSyncAt      DateTime?      @map("last_sync_at")
-  nextSyncAt      DateTime?      @map("next_sync_at")
-  status          SyncRuleStatus @default(active)
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-
-  channel  Channel   @relation(fields: [channelId], references: [id])
-  shop     Shop      @relation(fields: [shopId], references: [id])
-  products Product[]
-  syncLogs SyncLog[]
-
-  @@map("sync_rules")
-}
-
-// 商品表
-model Product {
-  id                String     @id @default(uuid())
-  syncRuleId        String?    @map("sync_rule_id")
-  shopId            String?    @map("shop_id")
-  channelId         String?    @map("channel_id")
-  channelProductId  String     @map("channel_product_id") @db.VarChar(100)
-  sku               String     @db.VarChar(100)
-  platformSku       String?    @map("platform_sku") @db.VarChar(100) // 平台SKU，为空时使用sku
-  title             String     @db.VarChar(500)
-  originalPrice     Decimal    @map("original_price") @db.Decimal(10, 2)
-  finalPrice        Decimal    @map("final_price") @db.Decimal(10, 2)
-  originalStock     Int        @map("original_stock")
-  finalStock        Int        @map("final_stock")
-  localPrice        Decimal?   @map("local_price") @db.Decimal(10, 2)
-  localStock        Int?       @map("local_stock")
-  currency          String     @default("USD") @db.VarChar(10)
-  extraFields       Json?      @map("extra_fields")
-  platformProductId String?    @map("platform_product_id") @db.VarChar(100)
-  sourceChannel     String?    @map("source_channel") @db.VarChar(100)
-  syncStatus        SyncStatus @default(pending) @map("sync_status")
-  lastSyncAt        DateTime?  @map("last_sync_at")
-  createdAt         DateTime   @default(now()) @map("created_at")
-  updatedAt         DateTime   @updatedAt @map("updated_at")
-
-  syncRule SyncRule? @relation(fields: [syncRuleId], references: [id])
-  shop     Shop?     @relation(fields: [shopId], references: [id])
-  channel  Channel?  @relation(fields: [channelId], references: [id])
-
-  @@unique([shopId, sourceChannel, sku])
-  @@map("products")
-}
-
-// 同步日志表
-model SyncLog {
-  id           String        @id @default(uuid())
-  syncRuleId   String        @map("sync_rule_id")
-  syncType     SyncType      @map("sync_type")
-  triggerType  TriggerType   @map("trigger_type")
-  startedAt    DateTime      @default(now()) @map("started_at")
-  finishedAt   DateTime?     @map("finished_at")
-  totalCount   Int           @default(0) @map("total_count")
-  successCount Int           @default(0) @map("success_count")
-  failCount    Int           @default(0) @map("fail_count")
-  status       SyncLogStatus @default(running)
-  errorMessage String?       @map("error_message") @db.Text
-  details      Json?
-  createdAt    DateTime      @default(now()) @map("created_at")
-
-  syncRule SyncRule @relation(fields: [syncRuleId], references: [id])
-
-  @@map("sync_logs")
-}
-
 enum ShopSyncTaskStatus {
   pending
   running
@@ -210,30 +292,6 @@ enum ShopSyncTaskStatus {
   completed
   failed
   cancelled
-}
-
-// 店铺商品同步任务表
-model ShopSyncTask {
-  id           String             @id @default(uuid())
-  shopId       String             @map("shop_id")
-  shopName     String             @map("shop_name") @db.VarChar(100)
-  status       ShopSyncTaskStatus @default(pending)
-  progress     Int                @default(0)
-  total        Int                @default(0)
-  created      Int                @default(0)
-  updated      Int                @default(0)
-  skipped      Int                @default(0)
-  createdSkus  Json?              @map("created_skus")
-  updatedSkus  Json?              @map("updated_skus")
-  skippedSkus  Json?              @map("skipped_skus")
-  errorMessage String?            @map("error_message") @db.Text
-  startedAt    DateTime           @default(now()) @map("started_at")
-  finishedAt   DateTime?          @map("finished_at")
-  createdAt    DateTime           @default(now()) @map("created_at")
-
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  @@map("shop_sync_tasks")
 }
 
 enum FeedStatus {
@@ -249,25 +307,6 @@ enum FeedSyncType {
   both
 }
 
-// 自动同步配置表
-model AutoSyncConfig {
-  id                 String    @id @default(uuid())
-  shopId             String    @unique @map("shop_id")
-  enabled            Boolean   @default(false)
-  intervalDays       Int       @default(1) @map("interval_days") // 1/2/3/5/7
-  syncHour           Int       @default(8) @map("sync_hour") // 同步时间点（0-23小时）
-  syncType           String    @default("both") @map("sync_type") // price/inventory/both
-  useDiscountedPrice Boolean   @default(false) @map("use_discounted_price") // 优先使用优惠总价
-  lastSyncAt         DateTime? @map("last_sync_at")
-  nextSyncAt         DateTime? @map("next_sync_at")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
-
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  @@map("auto_sync_configs")
-}
-
 enum AutoSyncStage {
   fetch_channel
   update_local
@@ -275,70 +314,4 @@ enum AutoSyncStage {
   completed
   failed
   cancelled
-}
-
-// 自动同步任务表
-model AutoSyncTask {
-  id             String        @id @default(uuid())
-  shopId         String        @map("shop_id")
-  syncType       String        @default("both") @map("sync_type") // price/inventory/both
-  stage          AutoSyncStage @default(fetch_channel)
-  channelStats   Json?         @map("channel_stats") // { channelId: { total, fetched, status } }
-  localUpdated   Int           @default(0) @map("local_updated")
-  platformFeedId String?       @map("platform_feed_id")
-  platformStatus String?       @map("platform_status")
-  totalProducts  Int           @default(0) @map("total_products")
-  successCount   Int           @default(0) @map("success_count")
-  failCount      Int           @default(0) @map("fail_count")
-  errorMessage   String?       @map("error_message") @db.Text
-  startedAt      DateTime      @default(now()) @map("started_at")
-  finishedAt     DateTime?     @map("finished_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  @@map("auto_sync_tasks")
-}
-
-// 操作日志表
-model OperationLog {
-  id          String   @id @default(uuid())
-  shopId      String?  @map("shop_id")
-  type        String   @db.VarChar(50) // import_products, import_platform_sku, sync_price, sync_inventory, auto_sync
-  status      String   @default("running") @db.VarChar(20) // running, completed, failed, cancelled
-  total       Int      @default(0)
-  processed   Int      @default(0)
-  success     Int      @default(0)
-  failed      Int      @default(0)
-  message     String?  @db.Text
-  detail      Json?    // 详细信息
-  startedAt   DateTime @default(now()) @map("started_at")
-  finishedAt  DateTime? @map("finished_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  shop Shop? @relation(fields: [shopId], references: [id], onDelete: SetNull)
-
-  @@map("operation_logs")
-}
-
-// Feed同步记录表 - 跟踪沃尔玛Feed状态
-model FeedRecord {
-  id           String       @id @default(uuid())
-  shopId       String       @map("shop_id")
-  feedId       String       @map("feed_id") @db.VarChar(100)
-  syncType     FeedSyncType @map("sync_type")
-  itemCount    Int          @default(0) @map("item_count")
-  status       FeedStatus   @default(RECEIVED)
-  successCount Int          @default(0) @map("success_count")
-  failCount    Int          @default(0) @map("fail_count")
-  errorMessage String?      @map("error_message") @db.Text
-  feedDetail   Json?        @map("feed_detail")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
-  completedAt  DateTime?    @map("completed_at")
-
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  @@unique([shopId, feedId])
-  @@map("feed_records")
 }

@@ -16,6 +16,7 @@ interface SyncConfig {
   price: {
     enabled: boolean;
     source: 'channel' | 'local';
+    useDiscountedPrice?: boolean;
     tiers: PriceTier[];
     defaultMultiplier: number;
     defaultAdjustment: number;
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: SyncConfig = {
   price: {
     enabled: true,
     source: 'channel',
+    useDiscountedPrice: false,
     tiers: [],
     defaultMultiplier: 1.0,
     defaultAdjustment: 0,
@@ -76,6 +78,7 @@ export default function SyncConfigModal({ open, shopId, shopName, onClose }: Pro
           price: {
             enabled: res.price?.enabled ?? DEFAULT_CONFIG.price.enabled,
             source: res.price?.source ?? DEFAULT_CONFIG.price.source,
+            useDiscountedPrice: res.price?.useDiscountedPrice ?? DEFAULT_CONFIG.price.useDiscountedPrice,
             tiers: (res.price?.tiers || []).map((t: any) => ({
               minPrice: t.minPrice ?? 0,
               maxPrice: t.maxPrice ?? null,
@@ -175,6 +178,18 @@ export default function SyncConfigModal({ open, shopId, shopName, onClose }: Pro
                     <Radio value="channel">渠道价格</Radio>
                     <Radio value="local">本地价格</Radio>
                   </Radio.Group>
+                </div>
+                
+                <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
+                  <Switch
+                    size="small"
+                    checked={config.price.useDiscountedPrice}
+                    onChange={(checked) => setConfig({ ...config, price: { ...config.price, useDiscountedPrice: checked } })}
+                  />
+                  <span style={{ marginLeft: 8 }}>优先同步优惠总价</span>
+                  <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                    (如有优惠价则用优惠总价，否则用总价)
+                  </Text>
                 </div>
 
                 <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -220,8 +220,9 @@ export class AutoSyncProcessor extends WorkerHost {
 
     console.log(`[AutoSync] Stage 2: Update local products for shop ${task.shopId}`);
 
-    // 获取同步配置
+    // 获取同步配置（包含 useDiscountedPrice）
     const syncConfig = await this.shopService.getSyncConfig(task.shopId);
+    const useDiscountedPrice = syncConfig.price.useDiscountedPrice ?? false;
 
     // 获取所有有最新渠道数据的商品
     const products = await this.prisma.product.findMany({
@@ -243,12 +244,22 @@ export class AutoSyncProcessor extends WorkerHost {
         // 计算本地价格（原价 + 运费）
         const shippingFee = latestData.shippingFee || 0;
         const localPrice = originalPrice + shippingFee;
+        
+        // 计算优惠总价（优惠价 + 运费）
+        const discountedPrice = extraFields?.discountedPrice;
+        const discountedTotalPrice = discountedPrice ? discountedPrice + shippingFee : null;
+
+        // 确定用于同步的价格来源
+        // 如果启用了优惠价优先，且有优惠总价，则使用优惠总价；否则使用总价(localPrice)
+        let priceForSync: number;
+        if (useDiscountedPrice && discountedTotalPrice && discountedTotalPrice > 0) {
+          priceForSync = discountedTotalPrice;
+        } else {
+          priceForSync = syncConfig.price.source === 'local' ? localPrice : originalPrice;
+        }
 
         // 应用同步规则计算最终价格和库存
-        const finalPrice = this.shopService.calculateFinalPrice(
-          syncConfig.price.source === 'local' ? localPrice : originalPrice,
-          syncConfig
-        );
+        const finalPrice = this.shopService.calculateFinalPrice(priceForSync, syncConfig);
         const finalStock = this.shopService.calculateFinalStock(originalStock, syncConfig);
 
         await this.prisma.product.update({

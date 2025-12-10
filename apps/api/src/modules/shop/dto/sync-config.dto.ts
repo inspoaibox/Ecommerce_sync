@@ -23,6 +23,9 @@ export class PriceConfigDto {
   @ApiProperty({ description: '价格来源', enum: ['channel', 'local'] })
   source: 'channel' | 'local'; // channel=渠道价格, local=本地价格
 
+  @ApiProperty({ description: '优先使用优惠总价（如有优惠价则用优惠总价，否则用总价）' })
+  useDiscountedPrice?: boolean;
+
   @ApiProperty({ description: '价格区间规则', type: [PriceTierDto] })
   tiers: PriceTierDto[];
 
@@ -65,6 +68,7 @@ export const DEFAULT_SYNC_CONFIG: ShopSyncConfigDto = {
   price: {
     enabled: true,
     source: 'channel',
+    useDiscountedPrice: false,
     tiers: [],
     defaultMultiplier: 1.0,
     defaultAdjustment: 0,

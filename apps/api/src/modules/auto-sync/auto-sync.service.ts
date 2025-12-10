@@ -36,7 +36,6 @@ export class AutoSyncService {
     intervalDays?: number;
     syncHour?: number;
     syncType?: string;
-    useDiscountedPrice?: boolean;
   }) {
     // 检查店铺是否存在
     const shop = await this.prisma.shop.findUnique({ where: { id: shopId } });
@@ -98,6 +97,12 @@ export class AutoSyncService {
       throw new Error('该店铺已有正在运行的同步任务');
     }
 
+    // 获取自动同步配置，如果没有传入 syncType 则使用配置的值
+    const autoSyncConfig = await this.prisma.autoSyncConfig.findUnique({
+      where: { shopId },
+    });
+    const finalSyncType = syncType || autoSyncConfig?.syncType || 'both';
+
     // 获取店铺商品按渠道分组统计
     const products = await this.prisma.product.findMany({
       where: { shopId },
@@ -121,7 +126,7 @@ export class AutoSyncService {
     const task = await this.prisma.autoSyncTask.create({
       data: {
         shopId,
-        syncType: syncType || 'both',
+        syncType: finalSyncType,
         stage: 'fetch_channel',
         channelStats,
         totalProducts: products.length,

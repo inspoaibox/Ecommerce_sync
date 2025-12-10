@@ -377,19 +377,37 @@ export class ShopService {
 
       // 同步价格 - 使用 platformSku 或 sku
       // 跳过价格为空/null/0的商品
+      const useDiscountedPrice = syncConfig.price.useDiscountedPrice ?? false;
+      
       if (syncType === 'price' || syncType === 'both') {
         const priceItems = products
           .filter(p => {
             // 检查价格来源是否有效
+            const extraFields = p.extraFields as any;
+            const discountedPrice = extraFields?.discountedPrice;
+            const shippingFee = extraFields?.shippingFee || 0;
+            
+            // 如果启用优惠价且有优惠价，检查优惠总价
+            if (useDiscountedPrice && discountedPrice && discountedPrice > 0) {
+              return (discountedPrice + shippingFee) > 0;
+            }
+            // 否则检查总价(localPrice)或原价
             const sourcePrice = syncConfig.price.source === 'local' && p.localPrice !== null
               ? Number(p.localPrice)
               : Number(p.originalPrice);
             return sourcePrice > 0; // 跳过价格为空或0的商品
           })
           .map(p => {
+            const extraFields = p.extraFields as any;
+            const discountedPrice = extraFields?.discountedPrice;
+            const shippingFee = extraFields?.shippingFee || 0;
+            
             // 根据配置选择价格来源
             let sourcePrice: number;
-            if (syncConfig.price.source === 'local' && p.localPrice !== null) {
+            // 如果启用优惠价且有优惠价，使用优惠总价
+            if (useDiscountedPrice && discountedPrice && discountedPrice > 0) {
+              sourcePrice = discountedPrice + shippingFee;
+            } else if (syncConfig.price.source === 'local' && p.localPrice !== null) {
               sourcePrice = Number(p.localPrice);
             } else {
               sourcePrice = Number(p.originalPrice);
