@@ -1,0 +1,30 @@
+{
+  "MPItemFeedHeader": {
+    "processMode": "REPLACE",
+    "subset": "EXTERNAL",
+    "locale": [
+      "en",
+      "fr"
+    ],
+    "version": "1.06",
+    "sellingChannel": "mpsetupbymatch",
+    "mart": "WALMART_CA"
+  },
+  "MPItem": [
+    {
+      "Item": {
+        "sku": "skuAutomation-1746305343868",
+        "productIdentifiers": {
+          "productIdType": "GTIN",
+          "productId": "07463051290647"
+        },
+        "ShippingWeight": {
+          "measure": 28,
+          "unit": "lb"
+        },
+        "price": 41,
+        "productTaxCode": 20390004
+      }
+    }
+  ]
+}

@@ -51,13 +51,20 @@ export class ChannelService {
     await this.prisma.channel.delete({ where: { id } });
   }
 
+  /**
+   * 获取渠道适配器实例
+   */
+  getAdapter(channel: Channel) {
+    return ChannelAdapterFactory.create(
+      channel.type,
+      channel.apiConfig as Record<string, any>,
+    );
+  }
+
   async testConnection(id: string): Promise<{ success: boolean; message: string }> {
     const channel = await this.findOne(id);
     try {
-      const adapter = ChannelAdapterFactory.create(
-        channel.type,
-        channel.apiConfig as Record<string, any>,
-      );
+      const adapter = this.getAdapter(channel);
       const result = await adapter.testConnection();
       return {
         success: result,

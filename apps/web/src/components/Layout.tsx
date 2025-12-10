@@ -12,6 +12,8 @@ import {
   CloudSyncOutlined,
   SyncOutlined,
   HistoryOutlined,
+  UploadOutlined,
+  BarcodeOutlined,
 } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
 
@@ -49,6 +51,17 @@ export default function Layout() {
       children: [
         { key: '/products/query', icon: <SearchOutlined />, label: '商品查询' },
         { key: '/products/list', icon: <UnorderedListOutlined />, label: '商品管理' },
+      ],
+    },
+    {
+      key: '/listing',
+      icon: <UploadOutlined />,
+      label: '商品刊登',
+      children: [
+        { key: '/listing/query', icon: <SearchOutlined />, label: '商品查询' },
+        { key: '/listing/products', icon: <UnorderedListOutlined />, label: '刊登管理' },
+        { key: '/listing/categories', icon: <AppstoreOutlined />, label: '平台类目' },
+        { key: '/listing/upc', icon: <BarcodeOutlined />, label: 'UPC 管理' },
       ],
     },
     {
@@ -102,6 +115,9 @@ export default function Layout() {
     }
     if (location.pathname.startsWith('/products')) {
       keys.push('/products');
+    }
+    if (location.pathname.startsWith('/listing')) {
+      keys.push('/listing');
     }
     return keys;
   };

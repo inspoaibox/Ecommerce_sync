@@ -8,18 +8,19 @@ datasource db {
 }
 
 model Channel {
-  id          String             @id @default(uuid())
-  name        String             @db.VarChar(100)
-  code        String             @unique @db.VarChar(50)
-  type        String             @db.VarChar(50)
-  apiConfig   Json               @map("api_config")
-  description String?
-  status      Status             @default(active)
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  warehouses  ChannelWarehouse[]
-  products    Product[]
-  syncRules   SyncRule[]
+  id              String             @id @default(uuid())
+  name            String             @db.VarChar(100)
+  code            String             @unique @db.VarChar(50)
+  type            String             @db.VarChar(50)
+  apiConfig       Json               @map("api_config")
+  description     String?
+  status          Status             @default(active)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  warehouses      ChannelWarehouse[]
+  products        Product[]
+  syncRules       SyncRule[]
+  listingProducts ListingProduct[]   @relation("ListingProducts")
 
   @@map("channels")
 }
@@ -41,39 +42,43 @@ model ChannelWarehouse {
 }
 
 model Platform {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)
-  code        String   @unique @db.VarChar(50)
-  apiBaseUrl  String?  @map("api_base_url") @db.VarChar(255)
+  id          String             @id @default(uuid())
+  name        String             @db.VarChar(100)
+  code        String             @unique @db.VarChar(50)
+  apiBaseUrl  String?            @map("api_base_url") @db.VarChar(255)
   description String?
-  status      Status   @default(active)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  status      Status             @default(active)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
   shops       Shop[]
+  categories  PlatformCategory[]
+  categoryAttributeMappings CategoryAttributeMapping[]
 
   @@map("platforms")
 }
 
 model Shop {
-  id             String          @id @default(uuid())
-  platformId     String          @map("platform_id")
-  name           String          @db.VarChar(100)
-  code           String          @unique @db.VarChar(50)
-  apiCredentials Json            @map("api_credentials")
-  region         String?         @db.VarChar(50)
-  description    String?
-  status         Status          @default(active)
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  syncConfig     Json?           @map("sync_config")
-  autoSyncConfig AutoSyncConfig?
-  autoSyncTasks  AutoSyncTask[]
-  feedRecords    FeedRecord[]
-  operationLogs  OperationLog[]
-  products       Product[]
-  syncTasks      ShopSyncTask[]
-  platform       Platform        @relation(fields: [platformId], references: [id])
-  syncRules      SyncRule[]
+  id              String           @id @default(uuid())
+  platformId      String           @map("platform_id")
+  name            String           @db.VarChar(100)
+  code            String           @unique @db.VarChar(50)
+  apiCredentials  Json             @map("api_credentials")
+  region          String?          @db.VarChar(50)
+  description     String?
+  status          Status           @default(active)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  syncConfig      Json?            @map("sync_config")
+  autoSyncConfig  AutoSyncConfig?
+  autoSyncTasks   AutoSyncTask[]
+  feedRecords     FeedRecord[]
+  operationLogs   OperationLog[]
+  products        Product[]
+  syncTasks       ShopSyncTask[]
+  platform        Platform         @relation(fields: [platformId], references: [id])
+  syncRules       SyncRule[]
+  listingProducts ListingProduct[] @relation("ListingProducts")
+  listingTasks    ListingTask[]    @relation("ListingTasks")
 
   @@map("shops")
 }
@@ -315,4 +320,214 @@ enum AutoSyncStage {
   failed
   cancelled
   paused
+}
+
+
+// ==================== 商品刊登模块 ====================
+
+model ListingProduct {
+  id              String        @id @default(uuid())
+  shopId          String        @map("shop_id")
+  channelId       String        @map("channel_id")
+
+  // 基本信息（通用字段）
+  sku             String        @db.VarChar(100)
+  title           String        @db.VarChar(500)
+  description     String?       @db.Text
+
+  // 图片（通用）
+  mainImageUrl    String?       @map("main_image_url")
+  imageUrls       Json?         @map("image_urls")
+  videoUrls       Json?         @map("video_urls")
+
+  // 价格库存（通用）
+  price           Decimal       @db.Decimal(10, 2)
+  stock           Int           @default(0)
+  currency        String        @default("USD") @db.VarChar(10)
+
+  // 渠道原始数据（完整保存，支持扩展）
+  channelRawData  Json?         @map("channel_raw_data")
+
+  // 渠道标准化属性（从原始数据提取的常用字段）
+  channelAttributes Json?       @map("channel_attributes")
+
+  // 平台类目映射
+  platformCategoryId String?    @map("platform_category_id")
+
+  // 平台属性填写值
+  platformAttributes Json?      @map("platform_attributes")
+
+  // 平台特有字段
+  platformSpecificData Json?    @map("platform_specific_data")
+
+  // 属性映射配置
+  attributeMapping Json?        @map("attribute_mapping")
+
+  // AI 优化数据
+  aiOptimizedData Json?         @map("ai_optimized_data")
+  useAiOptimized  Boolean       @default(false) @map("use_ai_optimized")
+
+  // 刊登状态
+  listingStatus   ListingStatus @default(draft) @map("listing_status")
+  platformItemId  String?       @map("platform_item_id") @db.VarChar(100)
+  lastListedAt    DateTime?     @map("last_listed_at")
+  listingError    String?       @map("listing_error")
+
+  // 时间戳
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // 关联
+  shop            Shop          @relation("ListingProducts", fields: [shopId], references: [id], onDelete: Cascade)
+  channel         Channel       @relation("ListingProducts", fields: [channelId], references: [id])
+
+  @@unique([shopId, sku])
+  @@map("listing_products")
+}
+
+model PlatformCategory {
+  id              String              @id @default(uuid())
+  platformId      String              @map("platform_id")
+  country         String              @default("US") @db.VarChar(10)  // 国家代码，同平台不同国家类目独立
+
+  categoryId      String              @map("category_id") @db.VarChar(100)
+  categoryPath    String              @map("category_path") @db.VarChar(500)
+  name            String              @db.VarChar(200)
+  parentId        String?             @map("parent_id") @db.VarChar(100)
+  level           Int                 @default(0)
+  isLeaf          Boolean             @default(false) @map("is_leaf")
+
+  // Walmart 特有字段（Product Type Group / Product Type）
+  productTypeGroupId    String?       @map("product_type_group_id") @db.VarChar(200)
+  productTypeGroupName  String?       @map("product_type_group_name") @db.VarChar(255)
+  productTypeId         String?       @map("product_type_id") @db.VarChar(200)
+  productTypeName       String?       @map("product_type_name") @db.VarChar(255)
+
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  platform        Platform            @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  attributes      PlatformAttribute[]
+
+  @@unique([platformId, country, categoryId])  // 同平台同国家下类目ID唯一
+  @@index([platformId, country])               // 按平台+国家查询索引
+  @@map("platform_categories")
+}
+
+model PlatformAttribute {
+  id              String           @id @default(uuid())
+  categoryId      String           @map("category_id")
+  country         String           @default("US") @db.VarChar(10)  // 冗余存储国家，便于查询
+
+  attributeId     String           @map("attribute_id") @db.VarChar(100)
+  name            String           @db.VarChar(200)
+  description     String?
+  dataType        String           @map("data_type") @db.VarChar(50)
+  isRequired      Boolean          @default(false) @map("is_required")
+  isMultiSelect   Boolean          @default(false) @map("is_multi_select")
+  maxLength       Int?             @map("max_length")
+  enumValues      Json?            @map("enum_values")
+
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  category        PlatformCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, attributeId])
+  @@index([country])
+  @@map("platform_attributes")
+}
+
+model ListingTask {
+  id              String            @id @default(uuid())
+  shopId          String            @map("shop_id")
+
+  status          ListingTaskStatus @default(pending)
+  totalCount      Int               @default(0) @map("total_count")
+  successCount    Int               @default(0) @map("success_count")
+  failCount       Int               @default(0) @map("fail_count")
+
+  productIds      Json              @map("product_ids")
+  results         Json?
+
+  startedAt       DateTime          @default(now()) @map("started_at")
+  finishedAt      DateTime?         @map("finished_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  shop            Shop              @relation("ListingTasks", fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("listing_tasks")
+}
+
+enum ListingStatus {
+  draft
+  pending
+  submitting
+  listed
+  failed
+  updating
+}
+
+enum ListingTaskStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+// ==================== 类目属性映射配置 ====================
+
+model CategoryAttributeMapping {
+  id              String   @id @default(uuid())
+  platformId      String   @map("platform_id")
+  categoryId      String   @map("category_id")  // 平台类目ID（非数据库ID）
+  country         String   @default("US") @db.VarChar(10)
+  
+  // 映射规则 JSON 结构
+  // {
+  //   "rules": [
+  //     {
+  //       "attributeId": "brand",
+  //       "attributeName": "品牌",
+  //       "mappingType": "default_value" | "channel_data" | "enum_select" | "auto_generate",
+  //       "value": "默认值或渠道字段路径",
+  //       "isRequired": true,
+  //       "dataType": "string"
+  //     }
+  //   ]
+  // }
+  mappingRules    Json     @map("mapping_rules")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  platform        Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  
+  @@unique([platformId, country, categoryId])
+  @@index([platformId, country])
+  @@map("category_attribute_mappings")
+}
+
+enum AttributeMappingType {
+  default_value   // 使用固定默认值
+  channel_data    // 从渠道商品数据提取
+  enum_select     // 从平台枚举值选择
+  auto_generate   // 自动生成
+}
+
+// ==================== UPC 池管理 ====================
+
+model UpcPool {
+  id              String    @id @default(uuid())
+  upcCode         String    @unique @map("upc_code") @db.VarChar(20)
+  isUsed          Boolean   @default(false) @map("is_used")
+  productSku      String?   @map("product_sku") @db.VarChar(100)  // 关联的商品 SKU
+  shopId          String?   @map("shop_id")                        // 关联的店铺
+  usedAt          DateTime? @map("used_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  @@index([isUsed])
+  @@index([shopId])
+  @@map("upc_pool")
 }

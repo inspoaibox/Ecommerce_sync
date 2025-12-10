@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(php -r:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(php:*)",
+      "Bash(curl -s \"http://canda.localhost/wp-content/plugins/woo-walmart-sync/clear-opcache.php\")",
+      "Bash(cat:*)",
+      "Bash(python -c:*)",
+      "Bash(nul)",
+      "Bash(curl:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

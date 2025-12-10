@@ -11,6 +11,10 @@ import AutoSync from './pages/shop/AutoSync';
 import OperationLog from './pages/shop/OperationLog';
 import ProductQuery from './pages/product/ProductQuery';
 import ProductList from './pages/product/ProductList';
+import ListingQuery from './pages/listing/ListingQuery';
+import ListingProducts from './pages/listing/ListingProducts';
+import CategoryBrowser from './pages/listing/CategoryBrowser';
+import UpcManagement from './pages/listing/UpcManagement';
 
 function App() {
   return (
@@ -29,6 +33,11 @@ function App() {
           <Route path="shops/operation-log" element={<OperationLog />} />
           <Route path="shops/auto-sync" element={<AutoSync />} />
           <Route path="shops/:shopId/products" element={<ShopProducts />} />
+          {/* 商品刊登 */}
+          <Route path="listing/query" element={<ListingQuery />} />
+          <Route path="listing/products" element={<ListingProducts />} />
+          <Route path="listing/categories" element={<CategoryBrowser />} />
+          <Route path="listing/upc" element={<UpcManagement />} />
         </Route>
       </Routes>
     </BrowserRouter>

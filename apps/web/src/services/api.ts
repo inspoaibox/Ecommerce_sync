@@ -152,4 +152,92 @@ export const autoSyncApi = {
   deleteTask: (taskId: string) => api.delete(`/auto-sync/task/${taskId}`),
 };
 
+// 商品刊登
+export const listingApi = {
+  // 从渠道查询商品详情
+  queryFromChannel: (channelId: string, skus: string[]) =>
+    api.post('/listing/query-channel', { channelId, skus }),
+  // 导入商品
+  importProducts: (data: { shopId: string; channelId: string; products: any[]; duplicateAction?: 'skip' | 'update' }) =>
+    api.post('/listing/import', data),
+  // 商品列表
+  getProducts: (params?: any) => api.get('/listing/products', { params }),
+  // 商品详情
+  getProduct: (id: string) => api.get(`/listing/products/${id}`),
+  // 更新商品
+  updateProduct: (id: string, data: any) => api.put(`/listing/products/${id}`, data),
+  // 删除商品
+  deleteProducts: (ids: string[]) => api.delete('/listing/products', { data: { ids } }),
+  deleteProduct: (id: string) => api.delete(`/listing/products/${id}`),
+  // 验证刊登
+  validateListing: (productIds: string[]) => api.post('/listing/validate', { productIds }),
+  // 提交刊登
+  submitListing: (data: { shopId: string; productIds: string[]; categoryId?: string }) =>
+    api.post('/listing/submit', data),
+  // 刊登任务
+  getTasks: (params?: any) => api.get('/listing/tasks', { params }),
+  getTask: (taskId: string) => api.get(`/listing/tasks/${taskId}`),
+};
+
+// 平台类目
+export const platformCategoryApi = {
+  // 同步类目（支持指定国家）
+  syncCategories: (platformId: string, country?: string, shopId?: string) => 
+    api.post(`/platform-categories/sync/${platformId}`, null, { params: { country, shopId } }),
+  // 获取类目列表
+  getCategories: (params?: any) => api.get('/platform-categories', { params }),
+  // 获取类目树（支持指定国家）
+  getCategoryTree: (platformId: string, country?: string, parentId?: string) =>
+    api.get(`/platform-categories/tree/${platformId}`, { params: { country, parentId } }),
+  // 搜索类目（支持指定国家）
+  searchCategories: (platformId: string, keyword: string, country?: string, limit?: number) =>
+    api.get(`/platform-categories/search/${platformId}`, { params: { keyword, country, limit } }),
+  // 获取类目详情
+  getCategory: (id: string) => api.get(`/platform-categories/${id}`),
+  // 获取类目属性（支持指定国家）
+  getCategoryAttributes: (platformId: string, categoryId: string, country?: string) =>
+    api.get(`/platform-categories/${platformId}/attributes/${categoryId}`, { params: { country } }),
+  // 获取平台已同步的国家列表
+  getCountries: (platformId: string) => api.get(`/platform-categories/countries/${platformId}`),
+  // 获取类目属性映射配置
+  getCategoryAttributeMapping: (platformId: string, categoryId: string, country?: string) =>
+    api.get(`/platform-categories/${platformId}/mapping/${categoryId}`, { params: { country } }),
+  // 保存类目属性映射配置
+  saveCategoryAttributeMapping: (platformId: string, categoryId: string, mappingRules: any, country?: string) =>
+    api.post(`/platform-categories/${platformId}/mapping/${categoryId}`, { mappingRules }, { params: { country } }),
+  // 删除类目属性映射配置
+  deleteCategoryAttributeMapping: (platformId: string, categoryId: string, country?: string) =>
+    api.delete(`/platform-categories/${platformId}/mapping/${categoryId}`, { params: { country } }),
+  // 获取平台所有类目的映射配置列表
+  getCategoryAttributeMappings: (platformId: string, country?: string) =>
+    api.get(`/platform-categories/${platformId}/mappings`, { params: { country } }),
+};
+
+// UPC 池管理
+export const upcApi = {
+  // 获取统计信息
+  getStats: () => api.get('/upc/stats'),
+  // 获取列表
+  list: (params?: { page?: number; pageSize?: number; search?: string; status?: 'all' | 'used' | 'available' }) =>
+    api.get('/upc', { params }),
+  // 批量导入
+  import: (upcCodes: string[]) => api.post('/upc/import', { upcCodes }),
+  // 自动分配
+  autoAssign: (productSku: string, shopId?: string) => api.post('/upc/auto-assign', { productSku, shopId }),
+  // 手动分配
+  assign: (upcCode: string, productSku: string, shopId?: string) => api.post('/upc/assign', { upcCode, productSku, shopId }),
+  // 释放
+  release: (upcCode: string) => api.post(`/upc/release/${upcCode}`),
+  // 批量释放
+  batchRelease: (ids: string[]) => api.post('/upc/batch-release', { ids }),
+  // 批量标记为已使用
+  batchMarkUsed: (ids: string[]) => api.post('/upc/batch-mark-used', { ids }),
+  // 删除
+  delete: (id: string) => api.delete(`/upc/${id}`),
+  // 批量删除
+  batchDelete: (ids: string[]) => api.post('/upc/batch-delete', { ids }),
+  // 导出
+  export: (status?: 'all' | 'used' | 'available') => api.get('/upc/export', { params: { status } }),
+};
+
 export default api;

@@ -12,6 +12,9 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AutoSyncModule } from './modules/auto-sync/auto-sync.module';
 import { OperationLogModule } from './modules/operation-log/operation-log.module';
 import { QueuesModule } from './queues/queues.module';
+import { ListingModule } from './modules/listing/listing.module';
+import { PlatformCategoryModule } from './modules/platform-category/platform-category.module';
+import { UpcModule } from './modules/upc/upc.module';
 
 @Module({
   imports: [
@@ -34,6 +37,9 @@ import { QueuesModule } from './queues/queues.module';
     DashboardModule,
     AutoSyncModule,
     QueuesModule,
+    ListingModule,
+    PlatformCategoryModule,
+    UpcModule,
   ],
 })
 export class AppModule {}

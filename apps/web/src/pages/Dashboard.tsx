@@ -23,7 +23,7 @@ export default function Dashboard() {
       ]);
       setOverview(ov);
       setSyncStats(stats);
-      setRecentLogs(logs as any[]);
+      setRecentLogs(logs as unknown as any[]);
     } finally {
       setLoading(false);
     }

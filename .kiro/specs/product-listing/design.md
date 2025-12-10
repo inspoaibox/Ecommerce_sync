@@ -130,21 +130,37 @@ interface ListingService {
 
 ### 2. PlatformCategoryService
 
-负责平台类目和属性管理。
+负责平台类目和属性管理。支持多国家类目，同平台不同国家的类目独立存储，同国家的多个账号共享类目数据。
 
 ```typescript
 interface PlatformCategoryService {
-  // 同步平台类目
-  syncCategories(platformId: string): Promise<SyncResult>;
+  // 同步平台类目（支持指定国家，同国家多账号共享）
+  syncCategories(platformId: string, country?: string, shopId?: string): Promise<SyncResult>;
   
-  // 获取类目树
-  getCategoryTree(platformId: string, parentId?: string): Promise<CategoryNode[]>;
+  // 获取类目树（按国家筛选）
+  getCategoryTree(platformId: string, country?: string, parentId?: string): Promise<CategoryNode[]>;
   
-  // 搜索类目
-  searchCategories(platformId: string, keyword: string): Promise<Category[]>;
+  // 搜索类目（按国家筛选）
+  searchCategories(platformId: string, keyword: string, country?: string): Promise<Category[]>;
   
-  // 获取类目属性
-  getCategoryAttributes(platformId: string, categoryId: string): Promise<CategoryAttribute[]>;
+  // 获取类目属性（按国家筛选）
+  getCategoryAttributes(platformId: string, categoryId: string, country?: string): Promise<CategoryAttribute[]>;
+  
+  // 获取平台已同步的国家列表
+  getCountries(platformId: string): Promise<string[]>;
+  
+  // ========== 类目属性映射配置 ==========
+  // 获取类目属性映射配置
+  getCategoryAttributeMapping(platformId: string, categoryId: string, country?: string): Promise<CategoryAttributeMapping>;
+  
+  // 保存类目属性映射配置
+  saveCategoryAttributeMapping(data: SaveMappingDto): Promise<CategoryAttributeMapping>;
+  
+  // 删除类目属性映射配置
+  deleteCategoryAttributeMapping(platformId: string, categoryId: string, country?: string): Promise<void>;
+  
+  // 根据映射规则生成平台属性
+  generatePlatformAttributes(mappingRules: any, channelAttributes: any, channelRawData: any): Record<string, any>;
 }
 ```
 
@@ -372,10 +388,13 @@ enum ListingStatus {
 
 ### 2. PlatformCategory（平台类目）
 
+支持多国家类目，同平台不同国家的类目独立存储。同国家的多个账号共享类目数据，只需单账号同步即可。
+
 ```prisma
 model PlatformCategory {
   id              String   @id @default(uuid())
   platformId      String   @map("platform_id")
+  country         String   @default("US") @db.VarChar(10)  // 国家代码，同平台不同国家类目独立
   
   categoryId      String   @map("category_id") @db.VarChar(100)  // 平台类目ID
   categoryPath    String   @map("category_path") @db.VarChar(500) // 类目路径
@@ -390,7 +409,8 @@ model PlatformCategory {
   platform        Platform @relation(fields: [platformId], references: [id])
   attributes      PlatformAttribute[]
   
-  @@unique([platformId, categoryId])
+  @@unique([platformId, country, categoryId])  // 同平台同国家下类目ID唯一
+  @@index([platformId, country])               // 按平台+国家查询索引
   @@map("platform_categories")
 }
 ```
@@ -401,6 +421,7 @@ model PlatformCategory {
 model PlatformAttribute {
   id              String   @id @default(uuid())
   categoryId      String   @map("category_id")
+  country         String   @default("US") @db.VarChar(10)  // 冗余存储国家，便于查询
   
   attributeId     String   @map("attribute_id") @db.VarChar(100)
   name            String   @db.VarChar(200)
@@ -416,12 +437,81 @@ model PlatformAttribute {
   
   category        PlatformCategory @relation(fields: [categoryId], references: [id])
   
+  @@index([country])
+  
   @@unique([categoryId, attributeId])
   @@map("platform_attributes")
 }
 ```
 
-### 4. ListingTask（刊登任务）
+### 4. CategoryAttributeMapping（类目属性映射配置）
+
+用于存储每个类目的属性映射规则，支持四种映射类型：
+
+```prisma
+model CategoryAttributeMapping {
+  id              String   @id @default(uuid())
+  platformId      String   @map("platform_id")
+  categoryId      String   @map("category_id")  // 平台类目ID（非数据库ID）
+  country         String   @default("US") @db.VarChar(10)
+  
+  // 映射规则 JSON 结构
+  mappingRules    Json     @map("mapping_rules")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  platform        Platform @relation(fields: [platformId], references: [id])
+  
+  @@unique([platformId, country, categoryId])
+  @@index([platformId, country])
+  @@map("category_attribute_mappings")
+}
+
+// 映射规则 JSON 结构示例
+interface MappingRules {
+  rules: MappingRule[];
+}
+
+interface MappingRule {
+  attributeId: string;      // 平台属性ID
+  attributeName: string;    // 属性名称（显示用）
+  mappingType: AttributeMappingType;
+  value: string;            // 默认值或渠道字段路径
+  isRequired: boolean;      // 是否必填
+  dataType: string;         // 数据类型
+  enumValues?: string[];    // 枚举值列表（如有）
+}
+
+enum AttributeMappingType {
+  default_value   // 使用固定默认值
+  channel_data    // 从渠道商品数据提取（如 brand, mpn, weight 等）
+  enum_select     // 从平台枚举值选择
+  auto_generate   // 自动生成（如品牌默认 Unbranded）
+}
+```
+
+#### 映射类型说明
+
+1. **default_value（默认值）**: 为所有商品设置固定的默认值
+2. **channel_data（渠道数据）**: 从渠道商品的 channelAttributes 中提取对应字段
+3. **enum_select（枚举选择）**: 从平台允许的枚举值中选择一个固定值
+4. **auto_generate（自动生成）**: 系统根据属性类型自动生成值（如品牌默认 Unbranded）
+
+#### 渠道数据字段路径
+
+支持从 channelAttributes 提取的常用字段：
+- `brand` - 品牌
+- `mpn` - MPN
+- `upc` - UPC
+- `weight` / `weightUnit` - 重量和单位
+- `length` / `width` / `height` / `lengthUnit` - 尺寸
+- `assembledWeight` / `assembledLength` / `assembledWidth` / `assembledHeight` - 组装后尺寸
+- `placeOfOrigin` - 产地
+- `category` / `categoryCode` - 类目
+- `shippingFee` - 运费
+
+### 5. ListingTask（刊登任务）
 
 ```prisma
 model ListingTask {

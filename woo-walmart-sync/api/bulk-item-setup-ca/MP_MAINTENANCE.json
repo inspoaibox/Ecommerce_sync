@@ -1,0 +1,177 @@
+{
+  "MPItemFeedHeader": {
+    "subCategory": "clothing_other",
+    "sellingChannel": "marketplace",
+    "processMode": "REPLACE",
+    "mart": "WALMART_CA",
+    "locale": [
+      "en",
+      "fr"
+    ],
+    "version": "3.15",
+    "subset": "EXTERNAL"
+  },
+  "MPItem": [
+    {
+      "Orderable": {
+        "sku": "SKU-06872770335811",
+        "productIdentifiers": {
+          "productIdType": "GTIN",
+          "productId": "06831270747524"
+        },
+        "keyFeatures": [
+          {
+            "en": "A"
+          }
+        ],
+        "features": [
+          {
+            "en": "A"
+          }
+        ],
+        "productName": {
+          "en": "aQZWzDV1V5"
+        },
+        "brand": {
+          "en": "M&Ms"
+        },
+        "price": 85,
+        "msrp": 99.89,
+        "shipsInOriginalPackaging": "No",
+        "startDate": "2023-06-29",
+        "endDate": "2043-06-19",
+        "countryOfOriginAssembly": [
+          "AD - Andorra"
+        ],
+        "productTaxCode": 8908908908,
+        "ShippingWeight": {
+          "measure": 60,
+          "unit": "lb"
+        },
+        "shortDescription": {
+          "en": "Playback- Leave all charging worries at bay as the Rockerz 255 Pro+ comes with a humongous battery back up of upto 40 hours(@50% volume ASAP Charge- With a few minutes of ASAP Charge you can get upto 10 hours of audio time by charging them for only 10 mins. Battery Capacity (mAh): 300 mAh"
+        },
+        "mainImageUrl": "https://i5.walmartimages.com/asr/5648e103-3a6d-40a3-ac5f-4a45f523330b_1.caead10e12ec12b8ac8f3369021210eb.png?odnWidth=66&odnHeight=66&odnBg=ffffff",
+        "productSecondaryImageURL": [
+          "https://i5.walmartimages.com/asr/5648e103-3a6d-40a3-ac5f-4a45f523330b_1.caead10e12ec12b8ac8f3369021210eb.png?odnWidth=66&odnHeight=66&odnBg=ffffff"
+        ],
+        "manufacturer": {
+          "en": "A"
+        },
+        "warrantyText": {
+          "en": "A"
+        },
+        "warrantyURL": "https://i5.walmartimages.com/asr/5648e103-3a6d-40a3-ac5f-4a45f523330b_1.caead10e12ec12b8ac8f3369021210eb.png?odnWidth=66&odnHeight=66&odnBg=ffffff",
+        "keywords": {
+          "en": "A"
+        },
+        "electronicsIndicator": "No",
+        "isChemical": "No",
+        "isPesticide": "No",
+        "isAerosol": "No",
+        "isTemperatureSensitive": "No",
+        "manufacturerPartNumber": "A"
+      },
+      "Visible": {
+        "Clothing": {
+          "gender": "Female",
+          "color": [
+            {
+              "en": "A"
+            }
+          ],
+          "colorCategory": [
+            "Beige"
+          ],
+          "fabricContent": [
+            {
+              "materialName": {
+                "en": "99.89% A"
+              },
+              "materialPercentage": 67
+            }
+          ],
+          "fabricCareInstructions": [
+            {
+              "en": "A"
+            }
+          ],
+          "material": [
+            {
+              "en": "A"
+            }
+          ],
+          "pattern": [
+            {
+              "en": "A"
+            }
+          ],
+          "modelNumber": "A",
+          "neckSize": {
+            "measure": 99.89,
+            "unit": "in"
+          },
+          "sleeveLength": {
+            "measure": 99.89,
+            "unit": "in"
+          },
+          "braBandSize": {
+            "measure": 99.89,
+            "unit": "in"
+          },
+          "chestSize": {
+            "measure": 99.89,
+            "unit": "in"
+          },
+          "waistSize": {
+            "measure": 99.89,
+            "unit": "in"
+          },
+          "inseam": {
+            "measure": 99.89,
+            "unit": "in"
+          },
+          "theme": [
+            {
+              "en": "A"
+            }
+          ],
+          "season": [
+            {
+              "en": "A"
+            }
+          ],
+          "character": [
+            {
+              "en": "A"
+            }
+          ],
+          "globalBrandLicense": [
+            {
+              "en": "A"
+            }
+          ],
+          "sportsLeague": [
+            {
+              "en": "A",
+              "fr": "A"
+            }
+          ],
+          "sportsTeam": [
+            {
+              "en": "A"
+            }
+          ],
+          "athlete": [
+            {
+              "en": "A"
+            }
+          ],
+          "count": "A",
+          "countPerPack": 100,
+          "pieceCount": 100
+        }
+      }
+    }
+  ]
+}

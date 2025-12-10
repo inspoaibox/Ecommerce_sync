@@ -1,0 +1,56 @@
+{
+    "MPItemFeedHeader": {
+        "subCategory": "clothing_other",
+        "sellingChannel": "marketplace",
+        "processMode": "REPLACE",
+        "mart": "WALMART_CA",
+        "locale": [
+            "en",
+            "fr"
+        ],
+        "version": "3.15",
+        "subset": "EXTERNAL"
+    },
+    "MPItem": [
+        {
+            "Orderable": {
+                "sku": "CLOTHING_22112022_C101",
+                "shortDescription": {
+                    "en": "Test001 - Good in quality and reliability Popular brand names like Under Armour, American Eagle, Tommy Hilfiger had no issues with marketing their brand names because all of them are started before the internet era and with less competition in the field they succeed with their business field."
+                },
+                "keyFeatures": [
+                    {
+                        "en": "Famous dress which can be used casual - 001"
+                    }
+                ],
+                "shipsInOriginalPackaging": "No",
+                "MustShipAlone": "No",
+                "price": 60,
+                "startDate": "2023-01-06",
+                "endDate": "2049-12-31",
+                "productSecondaryImageURL": [
+                    "https://i5-qa.walmartimages.com/asr/f2b29a73-019f-47a3-9d24-38781ca43866.5b35e8c32dc2e35919d0700cb2f2a32f.jpeg"
+                ],
+                "productIdentifiers": {
+                    "productIdType": "GTIN",
+                    "productId": "00213656080788"
+                },
+                "productName": {
+                    "en": "Rest in peace after wearing the product Aqua 4 Swimwear for all the participants commonly"
+                },
+                "mainImageUrl": "https://i5-qa.walmartimages.com/asr/7b32a240-42f6-4369-84e3-0cc5d9aeb4c5.a3a8d9b3e63400c147a289ca77fad35a.jpeg",
+                "brand": {
+                    "en": "M&M"
+                },
+                "productTaxCode": 12345678,
+                "ShippingWeight": {
+                    "unit": "lb",
+                    "measure": 8
+                }
+            },
+            "Visible": {
+                "Clothing": {}
+            }
+        }
+    ]
+}

@@ -1,0 +1,47 @@
+{
+    "Automotive": [
+        "productName"
+    ],
+    "Baby": [
+        "productName"
+    ],
+    "Home": [
+        "productName"
+    ],
+    "Kitchen": [
+        "productName"
+    ],
+    "Pet": [
+        "productName"
+    ],
+    "Jewelry": [
+        "productName"
+    ],
+    "Electronics": [
+        "productName"
+    ],
+    "Garden": [
+        "productName"
+    ],
+    "Furniture": [
+        "productName"
+    ],
+    "Sports": [
+        "productName"
+    ],
+    "Beauty": [
+        "productName"
+    ],
+    "Office": [
+        "productName"
+    ],
+    "Clothing": [
+        "productName"
+    ],
+    "Health": [
+        "productName"
+    ],
+    "Books": [
+        "productName"
+    ]
+}
