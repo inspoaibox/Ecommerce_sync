@@ -432,7 +432,12 @@ export class ShopService {
 
           console.log(`[Shop ${id}] Price feed submitted: ${priceResult.feedId}, items: ${priceItems.length}`);
 
-          // 保存价格Feed记录
+          // 保存价格Feed记录，包含提交的数据
+          const feedData: Record<string, { price: number }> = {};
+          for (const item of priceItems) {
+            feedData[item.sku] = { price: item.price };
+          }
+          
           await this.prisma.feedRecord.create({
             data: {
               shopId: id,
@@ -440,6 +445,7 @@ export class ShopService {
               syncType: 'price',
               itemCount: priceItems.length,
               status: 'RECEIVED',
+              feedDetail: { submittedData: feedData },
             },
           });
         }
@@ -465,14 +471,20 @@ export class ShopService {
 
         console.log(`[Shop ${id}] Inventory feed submitted: ${inventoryResult.feedId}`);
 
-        // 保存库存Feed记录
+        // 保存库存Feed记录，包含提交的数据
+        const feedData: Record<string, { quantity: number }> = {};
+        for (const item of inventoryItems) {
+          feedData[item.sku] = { quantity: item.quantity };
+        }
+        
         await this.prisma.feedRecord.create({
           data: {
             shopId: id,
             feedId: inventoryResult.feedId,
             syncType: 'inventory',
-            itemCount: products.length,
+            itemCount: inventoryItems.length,
             status: 'RECEIVED',
+            feedDetail: { submittedData: feedData },
           },
         });
       }
@@ -588,8 +600,45 @@ export class ShopService {
     }
   }
 
-  // 获取Feed详情
-  async getFeedDetail(shopId: string, feedId: string) {
+  // 获取Feed详情（优先读取缓存，默认只获取失败数据）
+  // statusFilter: 'failed' | 'success' | 'all'
+  async getFeedDetail(shopId: string, feedId: string, statusFilter: 'failed' | 'success' | 'all' = 'failed') {
+    // 获取本地保存的 Feed 记录
+    const feedRecord = await this.prisma.feedRecord.findUnique({
+      where: { shopId_feedId: { shopId, feedId } },
+    });
+    
+    if (!feedRecord) {
+      throw new Error('Feed记录不存在');
+    }
+
+    const feedDetail = feedRecord.feedDetail as any || {};
+    const submittedData = feedDetail.submittedData || {};
+    
+    // 检查是否有对应状态的缓存数据
+    const cacheKey = `itemDetails_${statusFilter}`;
+    if (feedDetail[cacheKey]) {
+      return {
+        feedId: feedDetail.feedId || feedId,
+        feedStatus: feedDetail.feedStatus || feedRecord.status,
+        itemsReceived: feedDetail.itemsReceived,
+        itemsSucceeded: feedDetail.itemsSucceeded,
+        itemsFailed: feedDetail.itemsFailed,
+        itemDetails: feedDetail[cacheKey],
+        submittedData,
+        statusFilter,
+        cached: true,
+        cachedAt: feedDetail[`cachedAt_${statusFilter}`],
+      };
+    }
+
+    // 没有缓存，从 API 获取
+    return this.refreshFeedDetail(shopId, feedId, statusFilter);
+  }
+
+  // 强制刷新Feed详情（从API获取并缓存）
+  // statusFilter: 'failed' | 'success' | 'all'
+  async refreshFeedDetail(shopId: string, feedId: string, statusFilter: 'failed' | 'success' | 'all' = 'failed') {
     const shop = await this.findOne(shopId);
     const platformCode = (shop as any).platform?.code || shop.platformId;
 
@@ -597,18 +646,58 @@ export class ShopService {
       throw new Error('此功能仅支持沃尔玛平台');
     }
 
+    // 获取本地保存的 Feed 记录
+    const feedRecord = await this.prisma.feedRecord.findUnique({
+      where: { shopId_feedId: { shopId, feedId } },
+    });
+    
+    if (!feedRecord) {
+      throw new Error('Feed记录不存在');
+    }
+
+    const existingDetail = feedRecord.feedDetail as any || {};
+    const submittedData = existingDetail.submittedData || {};
+
     const adapter = PlatformAdapterFactory.create(
       platformCode,
       shop.apiCredentials as Record<string, any>,
     ) as any;
 
-    if (typeof adapter.getFeedStatus !== 'function') {
+    if (typeof adapter.getFeedStatusAll !== 'function') {
       throw new Error('沃尔玛适配器不支持Feed状态查询');
     }
 
     try {
-      const feedStatus = await adapter.getFeedStatus(feedId);
-      return feedStatus;
+      // 使用 getFeedStatusAll 获取明细（按状态筛选）
+      const feedStatus = await adapter.getFeedStatusAll(feedId, statusFilter);
+
+      // 缓存到数据库（按状态分别缓存）
+      const cacheKey = `itemDetails_${statusFilter}`;
+      const cachedDetail = {
+        ...existingDetail,
+        submittedData,
+        feedId: feedStatus.feedId,
+        feedStatus: feedStatus.feedStatus,
+        itemsReceived: feedStatus.itemsReceived,
+        itemsSucceeded: feedStatus.itemsSucceeded,
+        itemsFailed: feedStatus.itemsFailed,
+        [cacheKey]: feedStatus.itemDetails,
+        [`cachedAt_${statusFilter}`]: new Date().toISOString(),
+      };
+
+      await this.prisma.feedRecord.update({
+        where: { shopId_feedId: { shopId, feedId } },
+        data: { feedDetail: cachedDetail },
+      });
+
+      console.log(`[Shop ${shopId}] Feed detail (${statusFilter}) cached: ${feedId}, items: ${feedStatus.itemDetails?.itemIngestionStatus?.length || 0}`);
+
+      return { 
+        ...feedStatus, 
+        submittedData, 
+        statusFilter,
+        cached: false,
+      };
     } catch (error: any) {
       console.error(`[Shop ${shopId}] Get feed detail failed:`, error);
       throw new Error(error.message || '获取Feed详情失败');

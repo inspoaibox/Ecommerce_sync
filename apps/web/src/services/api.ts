@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 300000, // 5分钟超时（用于大数据量请求）
 });
 
 api.interceptors.response.use(
@@ -56,7 +56,10 @@ export const shopApi = {
   getFeeds: (id: string | undefined, params?: any) => 
     id ? api.get(`/shops/${id}/feeds`, { params }) : api.get('/shops/feeds', { params }),
   refreshFeedStatus: (id: string, feedId: string) => api.post(`/shops/${id}/feeds/${feedId}/refresh`),
-  getFeedDetail: (id: string, feedId: string) => api.get(`/shops/${id}/feeds/${feedId}/detail`),
+  getFeedDetail: (id: string, feedId: string, status: 'failed' | 'success' | 'all' = 'failed') => 
+    api.get(`/shops/${id}/feeds/${feedId}/detail`, { params: { status } }),
+  refreshFeedDetail: (id: string, feedId: string, status: 'failed' | 'success' | 'all' = 'failed') => 
+    api.post(`/shops/${id}/feeds/${feedId}/refresh-detail`, null, { params: { status } }),
   // 同步任务管理
   getSyncTasks: (params?: any) => api.get('/shops/sync-tasks', { params }),
   pauseSyncTask: (taskId: string) => api.post(`/shops/sync-task/${taskId}/pause`),

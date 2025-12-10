@@ -134,9 +134,23 @@ export class ShopController {
   }
 
   @Get(':id/feeds/:feedId/detail')
-  @ApiOperation({ summary: '获取Feed详情' })
-  getFeedDetail(@Param('id') id: string, @Param('feedId') feedId: string) {
-    return this.shopService.getFeedDetail(id, feedId);
+  @ApiOperation({ summary: '获取Feed详情（优先读取缓存，默认只获取失败数据）' })
+  getFeedDetail(
+    @Param('id') id: string,
+    @Param('feedId') feedId: string,
+    @Query('status') status?: 'failed' | 'success' | 'all',
+  ) {
+    return this.shopService.getFeedDetail(id, feedId, status || 'failed');
+  }
+
+  @Post(':id/feeds/:feedId/refresh-detail')
+  @ApiOperation({ summary: '刷新Feed详情（强制从API获取）' })
+  refreshFeedDetail(
+    @Param('id') id: string,
+    @Param('feedId') feedId: string,
+    @Query('status') status?: 'failed' | 'success' | 'all',
+  ) {
+    return this.shopService.refreshFeedDetail(id, feedId, status || 'failed');
   }
 
   @Get(':id/sync-config')

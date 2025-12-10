@@ -28,24 +28,39 @@ export class ProductService {
     
     if (syncRuleId) where.syncRuleId = syncRuleId;
     
-    // 批量 SKU 搜索（优先级高于单个 SKU）
+    if (syncStatus) where.syncStatus = syncStatus;
+    
+    // 构建搜索条件（SKU/platformSku/keyword 使用 OR 组合）
+    const searchConditions: Prisma.ProductWhereInput[] = [];
+    
+    // 批量 SKU 搜索（优先级高于单个 SKU）- 同时搜索 sku 和 platformSku
     if (skus) {
       const skuList = skus.split(',').map(s => s.trim()).filter(s => s.length > 0);
       if (skuList.length > 0) {
-        where.sku = { in: skuList };
+        searchConditions.push(
+          { sku: { in: skuList } },
+          { platformSku: { in: skuList } },
+        );
       }
     } else if (sku) {
-      where.sku = { contains: sku };
+      searchConditions.push(
+        { sku: { contains: sku, mode: 'insensitive' } },
+        { platformSku: { contains: sku, mode: 'insensitive' } },
+      );
     }
     
-    if (syncStatus) where.syncStatus = syncStatus;
-    
-    // 关键词搜索（SKU或标题）
+    // 关键词搜索（SKU、platformSku 或标题）
     if (keyword) {
-      where.OR = [
+      searchConditions.push(
         { sku: { contains: keyword, mode: 'insensitive' } },
+        { platformSku: { contains: keyword, mode: 'insensitive' } },
         { title: { contains: keyword, mode: 'insensitive' } },
-      ];
+      );
+    }
+    
+    // 如果有搜索条件，添加到 where
+    if (searchConditions.length > 0) {
+      where.OR = searchConditions;
     }
 
     const [data, total] = await Promise.all([
@@ -102,22 +117,36 @@ export class ProductService {
     
     if (syncRuleId) where.syncRuleId = syncRuleId;
     
+    if (syncStatus) where.syncStatus = syncStatus;
+    
+    // 构建搜索条件（SKU/platformSku/keyword 使用 OR 组合）
+    const searchConditions: Prisma.ProductWhereInput[] = [];
+    
     if (skus) {
       const skuList = skus.split(',').map(s => s.trim()).filter(s => s.length > 0);
       if (skuList.length > 0) {
-        where.sku = { in: skuList };
+        searchConditions.push(
+          { sku: { in: skuList } },
+          { platformSku: { in: skuList } },
+        );
       }
     } else if (sku) {
-      where.sku = { contains: sku };
+      searchConditions.push(
+        { sku: { contains: sku, mode: 'insensitive' } },
+        { platformSku: { contains: sku, mode: 'insensitive' } },
+      );
     }
     
-    if (syncStatus) where.syncStatus = syncStatus;
-    
     if (keyword) {
-      where.OR = [
+      searchConditions.push(
         { sku: { contains: keyword, mode: 'insensitive' } },
+        { platformSku: { contains: keyword, mode: 'insensitive' } },
         { title: { contains: keyword, mode: 'insensitive' } },
-      ];
+      );
+    }
+    
+    if (searchConditions.length > 0) {
+      where.OR = searchConditions;
     }
 
     return this.prisma.product.findMany({

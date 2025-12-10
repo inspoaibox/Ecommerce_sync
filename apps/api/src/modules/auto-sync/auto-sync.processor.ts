@@ -341,7 +341,12 @@ export class AutoSyncProcessor extends WorkerHost {
             data: { platformFeedId: priceResult.feedId, platformStatus: 'RECEIVED' },
           });
 
-          // 保存 Feed 记录
+          // 保存 Feed 记录，包含提交的数据
+          const feedData: Record<string, { price: number }> = {};
+          for (const item of priceItems) {
+            feedData[item.sku] = { price: item.price };
+          }
+          
           await this.prisma.feedRecord.create({
             data: {
               shopId: task.shopId,
@@ -349,6 +354,7 @@ export class AutoSyncProcessor extends WorkerHost {
               syncType: 'price',
               itemCount: priceItems.length,
               status: 'RECEIVED',
+              feedDetail: { submittedData: feedData },
             },
           });
 
@@ -373,18 +379,24 @@ export class AutoSyncProcessor extends WorkerHost {
           data: { platformFeedId: inventoryResult.feedId, platformStatus: 'RECEIVED' },
         });
 
-        // 保存 Feed 记录
+        // 保存 Feed 记录，包含提交的数据
+        const feedData: Record<string, { quantity: number }> = {};
+        for (const item of inventoryItems) {
+          feedData[item.sku] = { quantity: item.quantity };
+        }
+        
         await this.prisma.feedRecord.create({
           data: {
             shopId: task.shopId,
             feedId: inventoryResult.feedId,
             syncType: 'inventory',
-            itemCount: products.length,
+            itemCount: inventoryItems.length,
             status: 'RECEIVED',
+            feedDetail: { submittedData: feedData },
           },
         });
 
-        successCount = products.length;
+        successCount = inventoryItems.length;
       }
     } catch (error: any) {
       console.error(`[AutoSync] Push to platform failed:`, error.message);

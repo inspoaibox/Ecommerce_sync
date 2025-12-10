@@ -18,7 +18,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
       credentials.apiBaseUrl || 'https://marketplace.walmartapis.com';
     this.client = axios.create({
       baseURL,
-      timeout: 30000,
+      timeout: 60000, // 60秒超时
     });
 
     // 如果已有accessToken，直接使用
@@ -340,13 +340,14 @@ export class WalmartAdapter extends BasePlatformAdapter {
     }
   }
 
-  // 查询Feed状态
-  async getFeedStatus(feedId: string): Promise<any> {
+  // 查询Feed状态（单页）
+  async getFeedStatus(feedId: string, includeDetails: boolean = true, offset: number = 0, limit: number = 50): Promise<any> {
     try {
       const headers = await this.getHeaders();
 
       const response = await this.client.get(`/v3/feeds/${feedId}`, {
         headers,
+        params: { includeDetails, offset, limit },
       });
 
       return response.data;
@@ -356,6 +357,69 @@ export class WalmartAdapter extends BasePlatformAdapter {
       console.error('[Walmart] Get feed status failed:', errMsg);
       throw new Error(`查询Feed状态失败: ${errMsg}`);
     }
+  }
+
+  // 获取所有 Feed 明细（自动分页获取全部）
+  // statusFilter: 'all' | 'failed' | 'success' - 筛选状态
+  async getFeedStatusAll(feedId: string, statusFilter: 'all' | 'failed' | 'success' = 'all'): Promise<any> {
+    const limit = 50;
+    let offset = 0;
+    let allItems: any[] = [];
+    let baseData: any = null;
+    let pageCount = 0;
+
+    console.log(`[Walmart] Starting to fetch feed details for ${feedId}, filter: ${statusFilter}`);
+
+    while (true) {
+      pageCount++;
+      const data = await this.getFeedStatus(feedId, true, offset, limit);
+      
+      if (!baseData) {
+        baseData = { ...data };
+        console.log(`[Walmart] Feed ${feedId}: itemsReceived=${data.itemsReceived}, itemsSucceeded=${data.itemsSucceeded}, itemsFailed=${data.itemsFailed}`);
+      }
+
+      const items = data.itemDetails?.itemIngestionStatus || [];
+      
+      // 根据筛选条件过滤
+      const filteredItems = statusFilter === 'all' 
+        ? items 
+        : statusFilter === 'failed'
+          ? items.filter((item: any) => item.ingestionStatus !== 'SUCCESS')
+          : items.filter((item: any) => item.ingestionStatus === 'SUCCESS');
+      
+      allItems = allItems.concat(filteredItems);
+
+      // 如果返回的数量小于 limit，说明已经是最后一页
+      if (items.length < limit) {
+        break;
+      }
+
+      offset += limit;
+      
+      // 安全限制：最多获取 20000 条
+      if (offset >= 20000) {
+        console.log(`[Walmart] Feed ${feedId}: reached max offset 20000, stopping pagination`);
+        break;
+      }
+
+      // 每50页打印一次进度
+      if (pageCount % 50 === 0) {
+        console.log(`[Walmart] Feed ${feedId}: fetched ${allItems.length} ${statusFilter} items (page ${pageCount})`);
+      }
+
+      // 添加延迟避免请求过快
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // 合并所有结果
+    baseData.itemDetails = { itemIngestionStatus: allItems };
+    baseData.totalFetched = allItems.length;
+    baseData.statusFilter = statusFilter;
+    
+    console.log(`[Walmart] Feed ${feedId}: completed, total ${allItems.length} ${statusFilter} items in ${pageCount} pages`);
+    
+    return baseData;
   }
 
   // 获取商品列表（使用offset+limit分页，每页最多200条）
