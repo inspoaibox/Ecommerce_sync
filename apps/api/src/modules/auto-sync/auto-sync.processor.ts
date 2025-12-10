@@ -103,8 +103,17 @@ export class AutoSyncProcessor extends WorkerHost {
     for (const [channelId, channelProducts] of Object.entries(productsByChannel)) {
       if (autoSyncCancelSignals.get(taskId)) return;
 
-      // 更新渠道状态为 running
-      channelStats[channelId] = { ...channelStats[channelId], status: 'running' };
+      // 获取渠道名称
+      const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
+      const channelName = channel?.name || channelId;
+
+      // 更新渠道状态为 running，包含渠道名称和商品总数
+      channelStats[channelId] = { 
+        ...channelStats[channelId], 
+        name: channelName,
+        total: channelProducts.length,
+        status: 'running',
+      };
       await this.prisma.autoSyncTask.update({
         where: { id: taskId },
         data: { channelStats },
@@ -287,8 +296,10 @@ export class AutoSyncProcessor extends WorkerHost {
     console.log(`[AutoSync] Updated ${updated} products locally`);
   }
 
-  // 阶段3: 推送到平台
+  // 阶段3: 推送到平台（自动分批，每批最多9800条）
   private async stagePushPlatform(taskId: string) {
+    const BATCH_SIZE = 9800; // 每批最多9800条，确保Feed详情可完整查看
+    
     const task = await this.prisma.autoSyncTask.findUnique({
       where: { id: taskId },
       include: { shop: { include: { platform: true } } },
@@ -303,7 +314,6 @@ export class AutoSyncProcessor extends WorkerHost {
       return;
     }
 
-    // 获取所有商品
     const products = await this.prisma.product.findMany({
       where: { shopId: task.shopId },
     });
@@ -321,45 +331,55 @@ export class AutoSyncProcessor extends WorkerHost {
     const syncType = task.syncType as 'price' | 'inventory' | 'both';
     let successCount = 0;
     let failCount = 0;
+    const feedIds: string[] = [];
 
     try {
       // 同步价格 - 跳过价格为空/0的商品
       if (syncType === 'price' || syncType === 'both') {
         const priceItems = products
-          .filter(p => Number(p.finalPrice) > 0) // 跳过价格为空或0的商品
+          .filter(p => Number(p.finalPrice) > 0)
           .map(p => ({
-            sku: (p as any).platformSku || p.sku, // 优先使用平台SKU
+            sku: (p as any).platformSku || p.sku,
             price: Number(p.finalPrice),
             msrp: Number(p.originalPrice) || Number(p.finalPrice),
           }));
 
         if (priceItems.length > 0) {
-          const priceResult = await adapter.batchUpdatePrices(priceItems);
-          
-          await this.prisma.autoSyncTask.update({
-            where: { id: taskId },
-            data: { platformFeedId: priceResult.feedId, platformStatus: 'RECEIVED' },
-          });
+          // 分批提交价格
+          for (let i = 0; i < priceItems.length; i += BATCH_SIZE) {
+            if (autoSyncCancelSignals.get(taskId)) return;
+            
+            const batch = priceItems.slice(i, i + BATCH_SIZE);
+            const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(priceItems.length / BATCH_SIZE);
 
-          // 保存 Feed 记录，包含提交的数据
-          const feedData: Record<string, { price: number }> = {};
-          for (const item of priceItems) {
-            feedData[item.sku] = { price: item.price };
+            const priceResult = await adapter.batchUpdatePrices(batch);
+            feedIds.push(priceResult.feedId);
+            
+            console.log(`[AutoSync] Price feed ${batchNum}/${totalBatches} submitted: ${priceResult.feedId}, items: ${batch.length}`);
+
+            const feedData: Record<string, { price: number }> = {};
+            for (const item of batch) {
+              feedData[item.sku] = { price: item.price };
+            }
+            
+            await this.prisma.feedRecord.create({
+              data: {
+                shopId: task.shopId,
+                feedId: priceResult.feedId,
+                syncType: 'price',
+                itemCount: batch.length,
+                status: 'RECEIVED',
+                feedDetail: { submittedData: feedData, batchInfo: { batch: batchNum, total: totalBatches } },
+              },
+            });
+
+            // 批次间延迟
+            if (i + BATCH_SIZE < priceItems.length) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
           }
-          
-          await this.prisma.feedRecord.create({
-            data: {
-              shopId: task.shopId,
-              feedId: priceResult.feedId,
-              syncType: 'price',
-              itemCount: priceItems.length,
-              status: 'RECEIVED',
-              feedDetail: { submittedData: feedData },
-            },
-          });
-
-          successCount = priceItems.length;
-          console.log(`[AutoSync] Price feed submitted: ${priceResult.feedId}, items: ${priceItems.length}`);
+          successCount += priceItems.length;
         } else {
           console.log(`[AutoSync] No valid price items to sync`);
         }
@@ -368,36 +388,56 @@ export class AutoSyncProcessor extends WorkerHost {
       // 同步库存 - 库存为空时当作0处理
       if (syncType === 'inventory' || syncType === 'both') {
         const inventoryItems = products.map(p => ({
-          sku: (p as any).platformSku || p.sku, // 优先使用平台SKU
-          quantity: p.finalStock ?? 0, // 库存为空时当作0
+          sku: (p as any).platformSku || p.sku,
+          quantity: p.finalStock ?? 0,
         }));
 
-        const inventoryResult = await adapter.batchUpdateInventory(inventoryItems);
+        // 分批提交库存
+        for (let i = 0; i < inventoryItems.length; i += BATCH_SIZE) {
+          if (autoSyncCancelSignals.get(taskId)) return;
+          
+          const batch = inventoryItems.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          const totalBatches = Math.ceil(inventoryItems.length / BATCH_SIZE);
 
-        await this.prisma.autoSyncTask.update({
-          where: { id: taskId },
-          data: { platformFeedId: inventoryResult.feedId, platformStatus: 'RECEIVED' },
-        });
+          const inventoryResult = await adapter.batchUpdateInventory(batch);
+          feedIds.push(inventoryResult.feedId);
 
-        // 保存 Feed 记录，包含提交的数据
-        const feedData: Record<string, { quantity: number }> = {};
-        for (const item of inventoryItems) {
-          feedData[item.sku] = { quantity: item.quantity };
+          console.log(`[AutoSync] Inventory feed ${batchNum}/${totalBatches} submitted: ${inventoryResult.feedId}, items: ${batch.length}`);
+
+          const feedData: Record<string, { quantity: number }> = {};
+          for (const item of batch) {
+            feedData[item.sku] = { quantity: item.quantity };
+          }
+          
+          await this.prisma.feedRecord.create({
+            data: {
+              shopId: task.shopId,
+              feedId: inventoryResult.feedId,
+              syncType: 'inventory',
+              itemCount: batch.length,
+              status: 'RECEIVED',
+              feedDetail: { submittedData: feedData, batchInfo: { batch: batchNum, total: totalBatches } },
+            },
+          });
+
+          // 批次间延迟
+          if (i + BATCH_SIZE < inventoryItems.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         }
-        
-        await this.prisma.feedRecord.create({
-          data: {
-            shopId: task.shopId,
-            feedId: inventoryResult.feedId,
-            syncType: 'inventory',
-            itemCount: inventoryItems.length,
-            status: 'RECEIVED',
-            feedDetail: { submittedData: feedData },
-          },
-        });
-
-        successCount = inventoryItems.length;
+        successCount += inventoryItems.length;
       }
+
+      // 更新任务状态，保存所有 feedId
+      await this.prisma.autoSyncTask.update({
+        where: { id: taskId },
+        data: { 
+          platformFeedId: feedIds.join(','), 
+          platformStatus: 'RECEIVED',
+        },
+      });
+
     } catch (error: any) {
       console.error(`[AutoSync] Push to platform failed:`, error.message);
       failCount = products.length;

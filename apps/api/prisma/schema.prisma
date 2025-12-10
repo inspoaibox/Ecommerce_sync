@@ -314,4 +314,5 @@ enum AutoSyncStage {
   completed
   failed
   cancelled
+  paused
 }

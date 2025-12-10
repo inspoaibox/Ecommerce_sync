@@ -325,26 +325,23 @@ export class ShopService {
     };
   }
 
-  // 同步价格/库存到沃尔玛
+  // 同步价格/库存到沃尔玛（自动分批，每批最多9800条）
   async syncToWalmart(
     id: string,
     productIds: string[],
     syncType: 'price' | 'inventory' | 'both'
-  ): Promise<{ success: boolean; message: string; feedId?: string }> {
+  ): Promise<{ success: boolean; message: string; feedId?: string; feedIds?: string[] }> {
+    const BATCH_SIZE = 9800; // 每批最多9800条，确保Feed详情可完整查看
+    
     const shop = await this.findOne(id);
     const platformCode = (shop as any).platform?.code || shop.platformId;
 
-    // 验证是否为沃尔玛平台
     if (platformCode !== 'walmart') {
       throw new Error('此功能仅支持沃尔玛平台');
     }
 
-    // 获取要同步的商品
     const products = await this.prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        shopId: id,
-      },
+      where: { id: { in: productIds }, shopId: id },
     });
 
     if (products.length === 0) {
@@ -356,55 +353,37 @@ export class ShopService {
       shop.apiCredentials as Record<string, any>,
     ) as any;
 
-    // 验证适配器是否支持批量更新
-    if (syncType === 'price' || syncType === 'both') {
-      if (typeof adapter.batchUpdatePrices !== 'function') {
-        throw new Error('沃尔玛适配器不支持批量价格更新');
-      }
+    if ((syncType === 'price' || syncType === 'both') && typeof adapter.batchUpdatePrices !== 'function') {
+      throw new Error('沃尔玛适配器不支持批量价格更新');
     }
-    if (syncType === 'inventory' || syncType === 'both') {
-      if (typeof adapter.batchUpdateInventory !== 'function') {
-        throw new Error('沃尔玛适配器不支持批量库存更新');
-      }
+    if ((syncType === 'inventory' || syncType === 'both') && typeof adapter.batchUpdateInventory !== 'function') {
+      throw new Error('沃尔玛适配器不支持批量库存更新');
     }
 
     try {
-      // 获取店铺同步配置
       const syncConfig = await this.getSyncConfig(id);
-      
-      let feedId: string | undefined;
       const feedIds: string[] = [];
-
-      // 同步价格 - 使用 platformSku 或 sku
-      // 跳过价格为空/null/0的商品
       const useDiscountedPrice = syncConfig.price.useDiscountedPrice ?? false;
-      
+
+      // 同步价格
       if (syncType === 'price' || syncType === 'both') {
         const priceItems = products
           .filter(p => {
-            // 检查价格来源是否有效
             const extraFields = p.extraFields as any;
             const discountedPrice = extraFields?.discountedPrice;
             const shippingFee = extraFields?.shippingFee || 0;
-            
-            // 如果启用优惠价且有优惠价，检查优惠总价
             if (useDiscountedPrice && discountedPrice && discountedPrice > 0) {
               return (discountedPrice + shippingFee) > 0;
             }
-            // 否则检查总价(localPrice)或原价
             const sourcePrice = syncConfig.price.source === 'local' && p.localPrice !== null
-              ? Number(p.localPrice)
-              : Number(p.originalPrice);
-            return sourcePrice > 0; // 跳过价格为空或0的商品
+              ? Number(p.localPrice) : Number(p.originalPrice);
+            return sourcePrice > 0;
           })
           .map(p => {
             const extraFields = p.extraFields as any;
             const discountedPrice = extraFields?.discountedPrice;
             const shippingFee = extraFields?.shippingFee || 0;
-            
-            // 根据配置选择价格来源
             let sourcePrice: number;
-            // 如果启用优惠价且有优惠价，使用优惠总价
             if (useDiscountedPrice && discountedPrice && discountedPrice > 0) {
               sourcePrice = discountedPrice + shippingFee;
             } else if (syncConfig.price.source === 'local' && p.localPrice !== null) {
@@ -412,98 +391,101 @@ export class ShopService {
             } else {
               sourcePrice = Number(p.originalPrice);
             }
-            
-            // 应用价格计算规则
-            const calculatedPrice = this.calculateFinalPrice(sourcePrice, syncConfig);
-            
             return {
-              sku: p.platformSku || p.sku, // 优先使用平台SKU
-              price: calculatedPrice,
-              msrp: Number(p.originalPrice) || calculatedPrice, // 使用原价作为MSRP，为空则用计算价格
+              sku: p.platformSku || p.sku,
+              price: this.calculateFinalPrice(sourcePrice, syncConfig),
+              msrp: Number(p.originalPrice) || this.calculateFinalPrice(sourcePrice, syncConfig),
             };
           });
 
         if (priceItems.length === 0) {
-          console.log(`[Shop ${id}] No valid price items to sync (all prices are empty or 0)`);
+          console.log(`[Shop ${id}] No valid price items to sync`);
         } else {
-          const priceResult = await adapter.batchUpdatePrices(priceItems);
-          feedId = priceResult.feedId;
-          feedIds.push(priceResult.feedId);
+          // 分批提交价格
+          for (let i = 0; i < priceItems.length; i += BATCH_SIZE) {
+            const batch = priceItems.slice(i, i + BATCH_SIZE);
+            const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(priceItems.length / BATCH_SIZE);
+            
+            const priceResult = await adapter.batchUpdatePrices(batch);
+            feedIds.push(priceResult.feedId);
+            console.log(`[Shop ${id}] Price feed ${batchNum}/${totalBatches} submitted: ${priceResult.feedId}, items: ${batch.length}`);
 
-          console.log(`[Shop ${id}] Price feed submitted: ${priceResult.feedId}, items: ${priceItems.length}`);
+            const feedData: Record<string, { price: number }> = {};
+            for (const item of batch) {
+              feedData[item.sku] = { price: item.price };
+            }
+            await this.prisma.feedRecord.create({
+              data: {
+                shopId: id,
+                feedId: priceResult.feedId,
+                syncType: 'price',
+                itemCount: batch.length,
+                status: 'RECEIVED',
+                feedDetail: { submittedData: feedData, batchInfo: { batch: batchNum, total: totalBatches } },
+              },
+            });
 
-          // 保存价格Feed记录，包含提交的数据
-          const feedData: Record<string, { price: number }> = {};
-          for (const item of priceItems) {
-            feedData[item.sku] = { price: item.price };
+            // 批次间延迟
+            if (i + BATCH_SIZE < priceItems.length) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
           }
-          
-          await this.prisma.feedRecord.create({
-            data: {
-              shopId: id,
-              feedId: priceResult.feedId,
-              syncType: 'price',
-              itemCount: priceItems.length,
-              status: 'RECEIVED',
-              feedDetail: { submittedData: feedData },
-            },
-          });
         }
       }
 
-      // 同步库存 - 使用 platformSku 或 sku
-      // 库存为空/null时当作0处理
+      // 同步库存
       if (syncType === 'inventory' || syncType === 'both') {
-        const inventoryItems = products.map(p => {
-          // 库存为空时当作0处理
-          const originalStock = p.originalStock ?? 0;
-          const calculatedStock = this.calculateFinalStock(originalStock, syncConfig);
-          
-          return {
-            sku: p.platformSku || p.sku, // 优先使用平台SKU
-            quantity: calculatedStock,
-          };
-        });
+        const inventoryItems = products.map(p => ({
+          sku: p.platformSku || p.sku,
+          quantity: this.calculateFinalStock(p.originalStock ?? 0, syncConfig),
+        }));
 
-        const inventoryResult = await adapter.batchUpdateInventory(inventoryItems);
-        feedId = inventoryResult.feedId;
-        feedIds.push(inventoryResult.feedId);
+        // 分批提交库存
+        for (let i = 0; i < inventoryItems.length; i += BATCH_SIZE) {
+          const batch = inventoryItems.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          const totalBatches = Math.ceil(inventoryItems.length / BATCH_SIZE);
 
-        console.log(`[Shop ${id}] Inventory feed submitted: ${inventoryResult.feedId}`);
+          const inventoryResult = await adapter.batchUpdateInventory(batch);
+          feedIds.push(inventoryResult.feedId);
+          console.log(`[Shop ${id}] Inventory feed ${batchNum}/${totalBatches} submitted: ${inventoryResult.feedId}, items: ${batch.length}`);
 
-        // 保存库存Feed记录，包含提交的数据
-        const feedData: Record<string, { quantity: number }> = {};
-        for (const item of inventoryItems) {
-          feedData[item.sku] = { quantity: item.quantity };
+          const feedData: Record<string, { quantity: number }> = {};
+          for (const item of batch) {
+            feedData[item.sku] = { quantity: item.quantity };
+          }
+          await this.prisma.feedRecord.create({
+            data: {
+              shopId: id,
+              feedId: inventoryResult.feedId,
+              syncType: 'inventory',
+              itemCount: batch.length,
+              status: 'RECEIVED',
+              feedDetail: { submittedData: feedData, batchInfo: { batch: batchNum, total: totalBatches } },
+            },
+          });
+
+          // 批次间延迟
+          if (i + BATCH_SIZE < inventoryItems.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         }
-        
-        await this.prisma.feedRecord.create({
-          data: {
-            shopId: id,
-            feedId: inventoryResult.feedId,
-            syncType: 'inventory',
-            itemCount: inventoryItems.length,
-            status: 'RECEIVED',
-            feedDetail: { submittedData: feedData },
-          },
-        });
       }
 
       // 更新商品同步状态
       await this.prisma.product.updateMany({
         where: { id: { in: productIds } },
-        data: {
-          syncStatus: 'pending',
-          updatedAt: new Date(),
-        },
+        data: { syncStatus: 'pending', updatedAt: new Date() },
       });
 
       const typeText = syncType === 'price' ? '价格' : syncType === 'inventory' ? '库存' : '价格和库存';
-      const feedIdsText = feedIds.length > 1 ? `Feed IDs: ${feedIds.join(', ')}` : `Feed ID: ${feedId}`;
+      const batchInfo = feedIds.length > 1 ? `（分 ${feedIds.length} 批提交）` : '';
       return {
         success: true,
-        message: `成功提交${typeText}同步任务，共 ${products.length} 个商品。${feedIdsText}`,
-        feedId,
+        message: `成功提交${typeText}同步任务，共 ${products.length} 个商品${batchInfo}`,
+        feedId: feedIds[0],
+        feedIds,
       };
     } catch (error: any) {
       console.error(`[Shop ${id}] Sync to Walmart failed:`, error);
@@ -546,6 +528,23 @@ export class ShopService {
     ]);
 
     return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+
+  // 删除Feed记录
+  async deleteFeed(shopId: string, feedId: string) {
+    const feedRecord = await this.prisma.feedRecord.findUnique({
+      where: { shopId_feedId: { shopId, feedId } },
+    });
+    
+    if (!feedRecord) {
+      throw new Error('Feed记录不存在');
+    }
+
+    await this.prisma.feedRecord.delete({
+      where: { shopId_feedId: { shopId, feedId } },
+    });
+
+    return { success: true, message: 'Feed记录已删除' };
   }
 
   // 刷新Feed状态

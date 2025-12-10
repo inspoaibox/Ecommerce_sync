@@ -60,6 +60,7 @@ export const shopApi = {
     api.get(`/shops/${id}/feeds/${feedId}/detail`, { params: { status } }),
   refreshFeedDetail: (id: string, feedId: string, status: 'failed' | 'success' | 'all' = 'failed') => 
     api.post(`/shops/${id}/feeds/${feedId}/refresh-detail`, null, { params: { status } }),
+  deleteFeed: (id: string, feedId: string) => api.delete(`/shops/${id}/feeds/${feedId}`),
   // 同步任务管理
   getSyncTasks: (params?: any) => api.get('/shops/sync-tasks', { params }),
   pauseSyncTask: (taskId: string) => api.post(`/shops/sync-task/${taskId}/pause`),
@@ -145,6 +146,9 @@ export const autoSyncApi = {
   getTasks: (params?: any) => api.get('/auto-sync/tasks', { params }),
   getTask: (taskId: string) => api.get(`/auto-sync/task/${taskId}`),
   cancelTask: (taskId: string) => api.post(`/auto-sync/task/${taskId}/cancel`),
+  pauseTask: (taskId: string) => api.post(`/auto-sync/task/${taskId}/pause`),
+  resumeTask: (taskId: string) => api.post(`/auto-sync/task/${taskId}/resume`),
+  retryTask: (taskId: string) => api.post(`/auto-sync/task/${taskId}/retry`),
   deleteTask: (taskId: string) => api.delete(`/auto-sync/task/${taskId}`),
 };
 

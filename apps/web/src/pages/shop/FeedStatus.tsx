@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, Table, Tag, Button, Space, Select, message, Modal, Descriptions, Tabs } from 'antd';
-import { ReloadOutlined, EyeOutlined } from '@ant-design/icons';
+import { ReloadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
 import dayjs from 'dayjs';
 
@@ -43,6 +43,24 @@ export default function FeedStatus() {
     } catch (e: any) { message.error(e.message || '刷新失败'); }
   };
 
+  const handleDeleteFeed = (record: any) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除 Feed ${record.feedId} 吗？`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        const shopId = record.shopId || record.shop?.id;
+        try {
+          await shopApi.deleteFeed(shopId, record.feedId);
+          message.success('删除成功');
+          loadFeeds();
+        } catch (e: any) { message.error(e.message || '删除失败'); }
+      },
+    });
+  };
+
   const [failedData, setFailedData] = useState<any>(null);
   const [successData, setSuccessData] = useState<any>(null);
   const [loadingFailed, setLoadingFailed] = useState(false);
@@ -53,16 +71,86 @@ export default function FeedStatus() {
     setFailedData(null);
     setSuccessData(null);
     setDetailModal(true);
-    // 默认只加载失败数据
+    const shopId = feed.shopId || feed.shop?.id || selectedShop;
+    
+    // 并行尝试加载缓存数据（不会触发 API 请求，只读取已缓存的数据）
+    const loadPromises: Promise<any>[] = [];
+    
+    // 尝试加载失败数据缓存
     if ((feed.failCount || 0) > 0) {
-      setLoadingFailed(true);
-      const shopId = feed.shopId || feed.shop?.id || selectedShop;
-      try {
-        const res: any = await shopApi.getFeedDetail(shopId, feed.feedId, 'failed');
-        setFailedData(res);
-      } catch (e: any) { message.error(e.message || '获取失败数据失败'); }
-      finally { setLoadingFailed(false); }
+      loadPromises.push(
+        shopApi.getFeedDetail(shopId, feed.feedId, 'failed')
+          .then((res: any) => {
+            // 有缓存才显示，没缓存需要手动点击加载
+            if (res.cached) {
+              setFailedData(res);
+            }
+          })
+          .catch(() => {})
+      );
     }
+    
+    // 尝试加载成功数据缓存
+    if ((feed.successCount || 0) > 0) {
+      loadPromises.push(
+        shopApi.getFeedDetail(shopId, feed.feedId, 'success')
+          .then((res: any) => {
+            // 有缓存才显示，没缓存需要手动点击加载
+            if (res.cached) {
+              setSuccessData(res);
+            }
+          })
+          .catch(() => {})
+      );
+    }
+    
+    await Promise.all(loadPromises);
+  };
+
+  // 导出 SKU 列表
+  const exportSkuList = (data: any, type: 'success' | 'failed') => {
+    if (!data?.itemDetails?.itemIngestionStatus?.length) {
+      message.warning('没有数据可导出');
+      return;
+    }
+    
+    const items = data.itemDetails.itemIngestionStatus;
+    const submittedData = data.submittedData || {};
+    const syncType = selectedFeed?.syncType || '';
+    
+    // 构建 CSV 内容
+    const headers = ['SKU', '状态'];
+    if (syncType === 'price' || syncType === 'both') headers.push('提交价格');
+    if (syncType === 'inventory' || syncType === 'both') headers.push('提交库存');
+    if (type === 'failed') headers.push('错误信息');
+    
+    const rows = items.map((item: any) => {
+      const row = [
+        item.sku,
+        item.ingestionStatus === 'SUCCESS' ? '成功' : '失败',
+      ];
+      if (syncType === 'price' || syncType === 'both') {
+        row.push(submittedData[item.sku]?.price ?? '');
+      }
+      if (syncType === 'inventory' || syncType === 'both') {
+        row.push(submittedData[item.sku]?.quantity ?? '');
+      }
+      if (type === 'failed') {
+        const errors = item.ingestionErrors?.ingestionError;
+        row.push(errors?.[0]?.description || errors?.[0]?.code || '');
+      }
+      return row.join(',');
+    });
+    
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `feed_${selectedFeed?.feedId}_${type}_${dayjs().format('YYYYMMDD_HHmmss')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    message.success('导出成功');
   };
 
   const loadSuccessData = async () => {
@@ -171,6 +259,7 @@ export default function FeedStatus() {
         <Space>
           <Button type="link" size="small" icon={<ReloadOutlined />} onClick={() => handleRefreshFeed(record.feedId, record.shopId || record.shop?.id)}>刷新</Button>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>详情</Button>
+          <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => handleDeleteFeed(record)}>删除</Button>
         </Space>
       ),
     },
@@ -216,11 +305,23 @@ export default function FeedStatus() {
                     <div>
                       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ color: '#999', fontSize: 12 }}>
-                          {failedData?.cached ? `缓存数据（${failedData.cachedAt ? new Date(failedData.cachedAt).toLocaleString() : ''}）` : failedData ? '最新数据' : ''}
+                          {failedData?.cached ? `缓存数据（${failedData.cachedAt ? new Date(failedData.cachedAt).toLocaleString() : ''}）` : failedData ? '最新数据' : '点击按钮加载失败数据'}
                         </span>
-                        <Button size="small" icon={<ReloadOutlined />} loading={loadingFailed} onClick={refreshFailedData}>
-                          更新失败数据
-                        </Button>
+                        <Space>
+                          {failedData?.itemDetails?.itemIngestionStatus?.length > 0 && (
+                            <Button size="small" onClick={() => exportSkuList(failedData, 'failed')}>导出</Button>
+                          )}
+                          {!failedData && (selectedFeed.failCount || 0) > 0 && (
+                            <Button size="small" type="primary" loading={loadingFailed} onClick={refreshFailedData}>
+                              加载失败数据
+                            </Button>
+                          )}
+                          {failedData && (
+                            <Button size="small" icon={<ReloadOutlined />} loading={loadingFailed} onClick={refreshFailedData}>
+                              更新失败数据
+                            </Button>
+                          )}
+                        </Space>
                       </div>
                       {loadingFailed && (
                         <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -230,10 +331,22 @@ export default function FeedStatus() {
                           </div>
                         </div>
                       )}
+                      {!loadingFailed && !failedData && (selectedFeed.failCount || 0) > 0 && (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                          点击上方按钮加载失败数据
+                        </div>
+                      )}
                       {!loadingFailed && failedData?.itemDetails?.itemIngestionStatus?.length > 0 && (
-                        <Table dataSource={failedData.itemDetails.itemIngestionStatus} rowKey={(r: any) => r.sku || Math.random()} size="small"
-                          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: t => `共 ${t} 条` }}
-                          columns={getDetailColumns(selectedFeed.syncType, failedData.submittedData || {})} />
+                        <>
+                          {failedData.reachedApiLimit && (
+                            <div style={{ padding: '8px 12px', background: '#fffbe6', borderRadius: 4, marginBottom: 12, border: '1px solid #ffe58f' }}>
+                              <span style={{ color: '#d48806' }}>⚠ Walmart API 限制最多返回 10000 条记录，当前显示 {failedData.totalFetched} 条（实际失败 {selectedFeed.failCount} 条）</span>
+                            </div>
+                          )}
+                          <Table dataSource={failedData.itemDetails.itemIngestionStatus} rowKey={(r: any) => r.sku || Math.random()} size="small"
+                            pagination={{ pageSize: 20, showSizeChanger: true, showTotal: t => `共 ${t} 条` }}
+                            columns={getDetailColumns(selectedFeed.syncType, failedData.submittedData || {})} />
+                        </>
                       )}
                       {!loadingFailed && (selectedFeed.failCount || 0) === 0 && (
                         <div style={{ padding: '12px', background: '#f6ffed', borderRadius: 4 }}>
@@ -258,6 +371,9 @@ export default function FeedStatus() {
                           {successData?.cached ? `缓存数据（${successData.cachedAt ? new Date(successData.cachedAt).toLocaleString() : ''}）` : successData ? '最新数据' : '点击按钮加载成功数据'}
                         </span>
                         <Space>
+                          {successData?.itemDetails?.itemIngestionStatus?.length > 0 && (
+                            <Button size="small" onClick={() => exportSkuList(successData, 'success')}>导出</Button>
+                          )}
                           {!successData && (
                             <Button size="small" type="primary" loading={loadingSuccess} onClick={loadSuccessData}>
                               加载成功数据
@@ -284,9 +400,16 @@ export default function FeedStatus() {
                         </div>
                       )}
                       {!loadingSuccess && successData?.itemDetails?.itemIngestionStatus?.length > 0 && (
-                        <Table dataSource={successData.itemDetails.itemIngestionStatus} rowKey={(r: any) => r.sku || Math.random()} size="small"
-                          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: t => `共 ${t} 条` }}
-                          columns={getDetailColumns(selectedFeed.syncType, successData.submittedData || {})} />
+                        <>
+                          {successData.reachedApiLimit && (
+                            <div style={{ padding: '8px 12px', background: '#fffbe6', borderRadius: 4, marginBottom: 12, border: '1px solid #ffe58f' }}>
+                              <span style={{ color: '#d48806' }}>⚠ Walmart API 限制最多返回 10000 条记录，当前显示 {successData.totalFetched} 条（实际成功 {selectedFeed.successCount} 条）</span>
+                            </div>
+                          )}
+                          <Table dataSource={successData.itemDetails.itemIngestionStatus} rowKey={(r: any) => r.sku || Math.random()} size="small"
+                            pagination={{ pageSize: 20, showSizeChanger: true, showTotal: t => `共 ${t} 条` }}
+                            columns={getDetailColumns(selectedFeed.syncType, successData.submittedData || {})} />
+                        </>
                       )}
                     </div>
                   ),

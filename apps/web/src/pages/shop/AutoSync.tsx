@@ -120,6 +120,36 @@ export default function AutoSync() {
     }
   };
 
+  const handlePauseTask = async (taskId: string) => {
+    try {
+      await autoSyncApi.pauseTask(taskId);
+      message.success('任务已暂停');
+      loadTasks();
+    } catch (e: any) {
+      message.error(e.message || '暂停失败');
+    }
+  };
+
+  const handleResumeTask = async (taskId: string) => {
+    try {
+      await autoSyncApi.resumeTask(taskId);
+      message.success('任务已继续');
+      loadTasks();
+    } catch (e: any) {
+      message.error(e.message || '继续失败');
+    }
+  };
+
+  const handleRetryTask = async (taskId: string) => {
+    try {
+      await autoSyncApi.retryTask(taskId);
+      message.success('任务已重新开始');
+      loadTasks();
+    } catch (e: any) {
+      message.error(e.message || '重试失败');
+    }
+  };
+
   const handleDeleteTask = async (taskId: string) => {
     try {
       await autoSyncApi.deleteTask(taskId);
@@ -138,6 +168,7 @@ export default function AutoSync() {
       completed: { color: 'success', text: '已完成' },
       failed: { color: 'error', text: '失败' },
       cancelled: { color: 'default', text: '已取消' },
+      paused: { color: 'warning', text: '已暂停' },
     };
     const config = stageMap[stage] || { color: 'default', text: stage };
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -222,18 +253,47 @@ export default function AutoSync() {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 220,
       render: (_: any, record: any) => (
         <Space>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewTask(record)}>
             详情
           </Button>
+          {/* 运行中的任务：暂停、取消 */}
           {['fetch_channel', 'update_local', 'push_platform'].includes(record.stage) && (
-            <Button type="link" size="small" danger onClick={() => handleCancelTask(record.id)}>
-              取消
-            </Button>
+            <>
+              <Button type="link" size="small" onClick={() => handlePauseTask(record.id)}>
+                暂停
+              </Button>
+              <Button type="link" size="small" danger onClick={() => handleCancelTask(record.id)}>
+                取消
+              </Button>
+            </>
           )}
-          {['completed', 'failed', 'cancelled'].includes(record.stage) && (
+          {/* 已暂停的任务：继续、取消 */}
+          {record.stage === 'paused' && (
+            <>
+              <Button type="link" size="small" onClick={() => handleResumeTask(record.id)}>
+                继续
+              </Button>
+              <Button type="link" size="small" danger onClick={() => handleCancelTask(record.id)}>
+                取消
+              </Button>
+            </>
+          )}
+          {/* 失败或取消的任务：重试、删除 */}
+          {['failed', 'cancelled'].includes(record.stage) && (
+            <>
+              <Button type="link" size="small" onClick={() => handleRetryTask(record.id)}>
+                重试
+              </Button>
+              <Button type="link" size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteTask(record.id)}>
+                删除
+              </Button>
+            </>
+          )}
+          {/* 已完成的任务：只有删除 */}
+          {record.stage === 'completed' && (
             <Button type="link" size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteTask(record.id)}>
               删除
             </Button>
@@ -369,13 +429,13 @@ export default function AutoSync() {
                 <h4>渠道获取进度：</h4>
                 {Object.entries(selectedTask.channelStats).map(([channelId, stat]: [string, any]) => (
                   <div key={channelId} style={{ marginBottom: 8 }}>
-                    <span style={{ marginRight: 8 }}>渠道 {channelId.slice(0, 8)}...</span>
+                    <span style={{ marginRight: 8, minWidth: 120, display: 'inline-block' }}>{stat.name || `渠道 ${channelId.slice(0, 8)}...`}</span>
                     <Progress
-                      percent={stat.total > 0 ? Math.round((stat.fetched / stat.total) * 100) : 0}
+                      percent={stat.total > 0 ? Math.round(((stat.fetched || 0) / stat.total) * 100) : 0}
                       size="small"
                       style={{ width: 200, display: 'inline-block' }}
                     />
-                    <span style={{ marginLeft: 8 }}>{stat.fetched}/{stat.total}</span>
+                    <span style={{ marginLeft: 8 }}>{stat.fetched || 0}/{stat.total || 0}</span>
                     <Tag style={{ marginLeft: 8 }} color={stat.status === 'completed' ? 'success' : stat.status === 'failed' ? 'error' : 'processing'}>
                       {stat.status}
                     </Tag>

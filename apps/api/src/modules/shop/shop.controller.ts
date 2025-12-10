@@ -133,6 +133,12 @@ export class ShopController {
     return this.shopService.refreshFeedStatus(id, feedId);
   }
 
+  @Delete(':id/feeds/:feedId')
+  @ApiOperation({ summary: '删除Feed记录' })
+  deleteFeed(@Param('id') id: string, @Param('feedId') feedId: string) {
+    return this.shopService.deleteFeed(id, feedId);
+  }
+
   @Get(':id/feeds/:feedId/detail')
   @ApiOperation({ summary: '获取Feed详情（优先读取缓存，默认只获取失败数据）' })
   getFeedDetail(

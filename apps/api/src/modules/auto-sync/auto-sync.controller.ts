@@ -56,6 +56,24 @@ export class AutoSyncController {
     return this.autoSyncService.cancelTask(taskId);
   }
 
+  @Post('task/:taskId/pause')
+  @ApiOperation({ summary: '暂停任务' })
+  pauseTask(@Param('taskId') taskId: string) {
+    return this.autoSyncService.pauseTask(taskId);
+  }
+
+  @Post('task/:taskId/resume')
+  @ApiOperation({ summary: '继续任务' })
+  resumeTask(@Param('taskId') taskId: string) {
+    return this.autoSyncService.resumeTask(taskId);
+  }
+
+  @Post('task/:taskId/retry')
+  @ApiOperation({ summary: '重试任务' })
+  retryTask(@Param('taskId') taskId: string) {
+    return this.autoSyncService.retryTask(taskId);
+  }
+
   @Delete('task/:taskId')
   @ApiOperation({ summary: '删除任务' })
   deleteTask(@Param('taskId') taskId: string) {

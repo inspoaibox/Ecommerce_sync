@@ -361,16 +361,26 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
   // 获取所有 Feed 明细（自动分页获取全部）
   // statusFilter: 'all' | 'failed' | 'success' - 筛选状态
+  // 注意：Walmart API 有 offset 上限 10000 的限制
   async getFeedStatusAll(feedId: string, statusFilter: 'all' | 'failed' | 'success' = 'all'): Promise<any> {
     const limit = 50;
+    const maxOffset = 10000; // Walmart API 的硬性限制
     let offset = 0;
     let allItems: any[] = [];
     let baseData: any = null;
     let pageCount = 0;
+    let reachedLimit = false;
 
     console.log(`[Walmart] Starting to fetch feed details for ${feedId}, filter: ${statusFilter}`);
 
     while (true) {
+      // 检查是否达到 Walmart API 的 offset 上限
+      if (offset >= maxOffset) {
+        console.log(`[Walmart] Feed ${feedId}: reached Walmart API max offset limit (10000), stopping`);
+        reachedLimit = true;
+        break;
+      }
+
       pageCount++;
       const data = await this.getFeedStatus(feedId, true, offset, limit);
       
@@ -396,12 +406,6 @@ export class WalmartAdapter extends BasePlatformAdapter {
       }
 
       offset += limit;
-      
-      // 安全限制：最多获取 20000 条
-      if (offset >= 20000) {
-        console.log(`[Walmart] Feed ${feedId}: reached max offset 20000, stopping pagination`);
-        break;
-      }
 
       // 每50页打印一次进度
       if (pageCount % 50 === 0) {
@@ -416,8 +420,9 @@ export class WalmartAdapter extends BasePlatformAdapter {
     baseData.itemDetails = { itemIngestionStatus: allItems };
     baseData.totalFetched = allItems.length;
     baseData.statusFilter = statusFilter;
+    baseData.reachedApiLimit = reachedLimit; // 标记是否达到 API 限制
     
-    console.log(`[Walmart] Feed ${feedId}: completed, total ${allItems.length} ${statusFilter} items in ${pageCount} pages`);
+    console.log(`[Walmart] Feed ${feedId}: completed, total ${allItems.length} ${statusFilter} items in ${pageCount} pages${reachedLimit ? ' (reached API limit)' : ''}`);
     
     return baseData;
   }

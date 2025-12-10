@@ -176,9 +176,13 @@ export class AutoSyncService {
     const task = await this.prisma.autoSyncTask.findUnique({ where: { id: taskId } });
     if (!task) throw new NotFoundException('任务不存在');
     
-    if (!['fetch_channel', 'update_local', 'push_platform'].includes(task.stage)) {
-      throw new Error('只能取消进行中的任务');
+    if (!['fetch_channel', 'update_local', 'push_platform', 'paused'].includes(task.stage)) {
+      throw new Error('只能取消进行中或已暂停的任务');
     }
+
+    // 发送取消信号
+    const { autoSyncCancelSignals } = await import('./auto-sync.processor');
+    autoSyncCancelSignals.set(taskId, true);
 
     await this.prisma.autoSyncTask.update({
       where: { id: taskId },
@@ -190,6 +194,98 @@ export class AutoSyncService {
     });
 
     return { success: true, message: '任务已取消' };
+  }
+
+  // 暂停任务
+  async pauseTask(taskId: string) {
+    const task = await this.prisma.autoSyncTask.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('任务不存在');
+    
+    if (!['fetch_channel', 'update_local', 'push_platform'].includes(task.stage)) {
+      throw new Error('只能暂停进行中的任务');
+    }
+
+    // 保存当前阶段，用于恢复
+    const previousStage = task.stage;
+
+    await this.prisma.autoSyncTask.update({
+      where: { id: taskId },
+      data: {
+        stage: 'paused',
+        errorMessage: `任务已暂停（暂停前阶段: ${previousStage}）`,
+      },
+    });
+
+    // 发送暂停信号
+    const { autoSyncCancelSignals } = await import('./auto-sync.processor');
+    autoSyncCancelSignals.set(taskId, true);
+
+    return { success: true, message: '任务已暂停' };
+  }
+
+  // 继续任务
+  async resumeTask(taskId: string) {
+    const task = await this.prisma.autoSyncTask.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('任务不存在');
+    
+    if (task.stage !== 'paused') {
+      throw new Error('只能继续已暂停的任务');
+    }
+
+    // 从错误信息中提取之前的阶段
+    const match = task.errorMessage?.match(/暂停前阶段: (\w+)/);
+    const previousStage = (match?.[1] || 'fetch_channel') as 'fetch_channel' | 'update_local' | 'push_platform';
+
+    await this.prisma.autoSyncTask.update({
+      where: { id: taskId },
+      data: {
+        stage: previousStage,
+        errorMessage: null,
+      },
+    });
+
+    // 清除暂停信号
+    const { autoSyncCancelSignals } = await import('./auto-sync.processor');
+    autoSyncCancelSignals.delete(taskId);
+
+    // 重新添加到队列
+    await this.autoSyncQueue.add('auto-sync', { taskId: task.id, resume: true });
+
+    return { success: true, message: '任务已继续' };
+  }
+
+  // 重试任务（失败或取消后）
+  async retryTask(taskId: string) {
+    const task = await this.prisma.autoSyncTask.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('任务不存在');
+    
+    if (!['failed', 'cancelled'].includes(task.stage)) {
+      throw new Error('只能重试失败或已取消的任务');
+    }
+
+    // 重置任务状态，从头开始
+    await this.prisma.autoSyncTask.update({
+      where: { id: taskId },
+      data: {
+        stage: 'fetch_channel',
+        errorMessage: null,
+        finishedAt: null,
+        localUpdated: 0,
+        successCount: 0,
+        failCount: 0,
+        platformFeedId: null,
+        platformStatus: null,
+      },
+    });
+
+    // 清除信号
+    const { autoSyncCancelSignals } = await import('./auto-sync.processor');
+    autoSyncCancelSignals.delete(taskId);
+
+    // 重新添加到队列
+    await this.autoSyncQueue.add('auto-sync', { taskId: task.id });
+
+    return { success: true, message: '任务已重新开始' };
   }
 
   // 删除任务
