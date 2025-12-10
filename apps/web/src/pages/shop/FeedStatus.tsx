@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 
 export default function FeedStatus() {
   const [shops, setShops] = useState<any[]>([]);
-  const [selectedShop, setSelectedShop] = useState<string>('');
+  const [selectedShop, setSelectedShop] = useState<string>('all'); // 默认全部店铺
   const [feeds, setFeeds] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
@@ -19,29 +19,22 @@ export default function FeedStatus() {
   }, []);
 
   useEffect(() => {
-    if (selectedShop) {
-      loadFeeds();
-    }
+    loadFeeds();
   }, [selectedShop, pagination.current, pagination.pageSize]);
 
   const loadShops = async () => {
     try {
       const res: any = await shopApi.list({ pageSize: 100 });
       setShops(res.data || []);
-      if (res.data && res.data.length > 0) {
-        setSelectedShop(res.data[0].id);
-      }
     } catch (e) {
       console.error(e);
     }
   };
 
   const loadFeeds = async () => {
-    if (!selectedShop) return;
-
     setLoading(true);
     try {
-      const res: any = await shopApi.getFeeds(selectedShop, {
+      const res: any = await shopApi.getFeeds(selectedShop === 'all' ? undefined : selectedShop, {
         page: pagination.current,
         pageSize: pagination.pageSize,
       });
@@ -54,9 +47,9 @@ export default function FeedStatus() {
     }
   };
 
-  const handleRefreshFeed = async (feedId: string) => {
+  const handleRefreshFeed = async (feedId: string, shopId: string) => {
     try {
-      await shopApi.refreshFeedStatus(selectedShop, feedId);
+      await shopApi.refreshFeedStatus(shopId, feedId);
       message.success('已刷新Feed状态');
       loadFeeds();
     } catch (e: any) {
@@ -69,8 +62,9 @@ export default function FeedStatus() {
     setDetailModal(true);
     setDetailLoading(true);
 
+    const shopId = feed.shopId || feed.shop?.id || selectedShop;
     try {
-      const res: any = await shopApi.getFeedDetail(selectedShop, feed.feedId);
+      const res: any = await shopApi.getFeedDetail(shopId, feed.feedId);
       setSelectedFeed({ ...feed, detail: res });
     } catch (e: any) {
       message.error(e.message || '获取详情失败');
@@ -101,6 +95,12 @@ export default function FeedStatus() {
   };
 
   const columns = [
+    ...(selectedShop === 'all' ? [{
+      title: '店铺',
+      dataIndex: ['shop', 'name'],
+      key: 'shopName',
+      width: 120,
+    }] : []),
     {
       title: 'Feed ID',
       dataIndex: 'feedId',
@@ -136,9 +136,13 @@ export default function FeedStatus() {
         if (record.status === 'PROCESSED') {
           return (
             <span>
-              <span style={{ color: '#52c41a' }}>{record.successCount || 0}</span>
+              <Button type="link" size="small" style={{ color: '#52c41a', padding: 0 }} onClick={() => handleViewDetail(record)}>
+                {record.successCount || 0}
+              </Button>
               {' / '}
-              <span style={{ color: '#ff4d4f' }}>{record.failCount || 0}</span>
+              <Button type="link" size="small" style={{ color: '#ff4d4f', padding: 0 }} onClick={() => handleViewDetail(record)}>
+                {record.failCount || 0}
+              </Button>
             </span>
           );
         }
@@ -170,7 +174,7 @@ export default function FeedStatus() {
             type="link"
             size="small"
             icon={<ReloadOutlined />}
-            onClick={() => handleRefreshFeed(record.feedId)}
+            onClick={() => handleRefreshFeed(record.feedId, record.shopId || record.shop?.id)}
           >
             刷新
           </Button>
@@ -198,7 +202,10 @@ export default function FeedStatus() {
               style={{ width: 200 }}
               value={selectedShop}
               onChange={setSelectedShop}
-              options={shops.map(s => ({ value: s.id, label: s.name }))}
+              options={[
+                { value: 'all', label: '全部店铺' },
+                ...shops.map(s => ({ value: s.id, label: s.name })),
+              ]}
             />
             <Button
               icon={<ReloadOutlined />}
@@ -278,12 +285,57 @@ export default function FeedStatus() {
 
             {selectedFeed.detail && (
               <div style={{ marginTop: 16 }}>
-                <h4>沃尔玛返回详情：</h4>
+                {/* SKU 明细表格 */}
+                {selectedFeed.detail.itemDetails?.itemIngestionStatus?.length > 0 ? (
+                  <>
+                    <h4>SKU 处理明细：</h4>
+                    <Table
+                      dataSource={selectedFeed.detail.itemDetails.itemIngestionStatus}
+                      rowKey={(r: any) => r.sku || r.martId || Math.random()}
+                      size="small"
+                      pagination={{ pageSize: 10 }}
+                      columns={[
+                        { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 150 },
+                        { 
+                          title: '状态', 
+                          dataIndex: 'ingestionStatus', 
+                          key: 'status', 
+                          width: 100,
+                          render: (s: string) => (
+                            <Tag color={s === 'SUCCESS' ? 'success' : 'error'}>{s}</Tag>
+                          )
+                        },
+                        { 
+                          title: '错误信息', 
+                          dataIndex: 'ingestionErrors', 
+                          key: 'errors',
+                          render: (errors: any) => {
+                            if (!errors?.ingestionError?.length) return '-';
+                            return errors.ingestionError.map((e: any, i: number) => (
+                              <div key={i} style={{ color: '#ff4d4f', fontSize: 12 }}>
+                                {e.description || e.code}
+                              </div>
+                            ));
+                          }
+                        },
+                      ]}
+                    />
+                  </>
+                ) : (
+                  <div style={{ padding: '12px', background: '#f6ffed', borderRadius: 4, marginBottom: 16 }}>
+                    <span style={{ color: '#52c41a' }}>✓ 全部处理成功，无失败明细</span>
+                    <span style={{ color: '#999', marginLeft: 8, fontSize: 12 }}>
+                      （Walmart API 仅在有失败时返回 SKU 明细）
+                    </span>
+                  </div>
+                )}
+                
+                <h4 style={{ marginTop: 16 }}>原始返回数据：</h4>
                 <pre style={{
                   background: '#f5f5f5',
                   padding: '12px',
                   borderRadius: '4px',
-                  maxHeight: '400px',
+                  maxHeight: '300px',
                   overflow: 'auto',
                 }}>
                   {JSON.stringify(selectedFeed.detail, null, 2)}

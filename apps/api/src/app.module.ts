@@ -9,6 +9,7 @@ import { SyncRuleModule } from './modules/sync-rule/sync-rule.module';
 import { ProductModule } from './modules/product/product.module';
 import { SyncLogModule } from './modules/sync-log/sync-log.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AutoSyncModule } from './modules/auto-sync/auto-sync.module';
 import { QueuesModule } from './queues/queues.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { QueuesModule } from './queues/queues.module';
     ProductModule,
     SyncLogModule,
     DashboardModule,
+    AutoSyncModule,
     QueuesModule,
   ],
 })

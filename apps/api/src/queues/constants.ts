@@ -4,4 +4,5 @@ export const QUEUE_NAMES = {
   TRANSFORM: 'transform',
   PUSH: 'push',
   SHOP_SYNC: 'shop-sync', // 店铺商品同步队列
+  AUTO_SYNC: 'auto-sync', // 自动同步队列
 } as const;

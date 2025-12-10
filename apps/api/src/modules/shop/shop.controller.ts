@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ShopService } from './shop.service';
 import { CreateShopDto, UpdateShopDto } from './dto/shop.dto';
+import { ShopSyncConfigDto } from './dto/sync-config.dto';
 import { PaginationDto } from '@/common/dto/pagination.dto';
 
 @ApiTags('店铺管理')
@@ -19,6 +20,12 @@ export class ShopController {
   @ApiOperation({ summary: '获取所有同步任务列表' })
   getSyncTasks(@Query() query: PaginationDto & { shopId?: string }) {
     return this.shopService.getSyncTasks(query);
+  }
+
+  @Get('feeds')
+  @ApiOperation({ summary: '获取所有店铺Feed记录列表' })
+  getAllFeeds(@Query() query: PaginationDto) {
+    return this.shopService.getAllFeeds(query);
   }
 
   @Get('sync-task/:taskId')
@@ -130,5 +137,17 @@ export class ShopController {
   @ApiOperation({ summary: '获取Feed详情' })
   getFeedDetail(@Param('id') id: string, @Param('feedId') feedId: string) {
     return this.shopService.getFeedDetail(id, feedId);
+  }
+
+  @Get(':id/sync-config')
+  @ApiOperation({ summary: '获取店铺同步配置' })
+  getSyncConfig(@Param('id') id: string) {
+    return this.shopService.getSyncConfig(id);
+  }
+
+  @Put(':id/sync-config')
+  @ApiOperation({ summary: '更新店铺同步配置' })
+  updateSyncConfig(@Param('id') id: string, @Body() config: any) {
+    return this.shopService.updateSyncConfig(id, config);
   }
 }

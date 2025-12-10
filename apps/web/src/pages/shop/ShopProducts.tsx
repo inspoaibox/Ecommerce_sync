@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Table, Tag, Input, Card, Space, Typography, Button, Popconfirm, message, Modal, Dropdown } from 'antd';
-import { DeleteOutlined, DownloadOutlined, DownOutlined, SyncOutlined, DollarOutlined, InboxOutlined } from '@ant-design/icons';
-import { productApi, shopApi } from '@/services/api';
+import { Table, Tag, Input, Card, Space, Typography, Button, Popconfirm, message, Modal, Dropdown, Upload, Select } from 'antd';
+import { DeleteOutlined, DownloadOutlined, DownOutlined, SyncOutlined, DollarOutlined, InboxOutlined, UploadOutlined, EditOutlined, ImportOutlined } from '@ant-design/icons';
+import { productApi, shopApi, channelApi } from '@/services/api';
 import dayjs from 'dayjs';
+import * as XLSX from 'xlsx';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -22,12 +23,31 @@ export default function ShopProducts() {
   const [syncMissingInput, setSyncMissingInput] = useState('');
   const [syncMissingLoading, setSyncMissingLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
+  const [platformSkuModal, setPlatformSkuModal] = useState(false);
+  const [platformSkuInput, setPlatformSkuInput] = useState('');
+  const [platformSkuLoading, setPlatformSkuLoading] = useState(false);
+  const [editingPlatformSku, setEditingPlatformSku] = useState<{ id: string; sku: string; platformSku: string } | null>(null);
+  const [importProductModal, setImportProductModal] = useState(false);
+  const [importProductInput, setImportProductInput] = useState('');
+  const [importProductLoading, setImportProductLoading] = useState(false);
+  const [channels, setChannels] = useState<any[]>([]);
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('');
 
   useEffect(() => {
     if (shopId) {
       loadShop();
     }
+    loadChannels();
   }, [shopId]);
+
+  const loadChannels = async () => {
+    try {
+      const res: any = await channelApi.list({ pageSize: 100 });
+      setChannels(res.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   useEffect(() => {
     if (shopId) {
@@ -246,8 +266,148 @@ export default function ShopProducts() {
     }
   };
 
+  // 导入平台SKU映射
+  const handleImportPlatformSku = async () => {
+    const lines = platformSkuInput.split('\n').filter(l => l.trim());
+    const mappings: { sku: string; platformSku: string }[] = [];
+    
+    for (const line of lines) {
+      const parts = line.split(/[,，\t]/).map(s => s.trim());
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        mappings.push({ sku: parts[0], platformSku: parts[1] });
+      }
+    }
+
+    if (mappings.length === 0) {
+      message.warning('请输入有效的SKU映射，格式：原始SKU,平台SKU');
+      return;
+    }
+
+    setPlatformSkuLoading(true);
+    try {
+      const res: any = await productApi.importPlatformSku(shopId!, mappings);
+      message.success(res.message || `成功更新 ${res.updated} 个商品的平台SKU`);
+      setPlatformSkuModal(false);
+      setPlatformSkuInput('');
+      loadData();
+    } catch (e: any) {
+      message.error(e.message || '导入失败');
+    } finally {
+      setPlatformSkuLoading(false);
+    }
+  };
+
+  // 单个编辑平台SKU
+  const handleSavePlatformSku = async () => {
+    if (!editingPlatformSku) return;
+    try {
+      await productApi.updatePlatformSku(editingPlatformSku.id, editingPlatformSku.platformSku);
+      message.success('平台SKU已更新');
+      setEditingPlatformSku(null);
+      loadData();
+    } catch (e: any) {
+      message.error(e.message || '更新失败');
+    }
+  };
+
+  // 处理文件上传（支持 CSV/TXT/XLSX）- 用于平台SKU映射
+  const handleFileUpload = (file: File, setInput: (v: string) => void, columns: number = 2) => {
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          
+          const lines = jsonData
+            .filter(row => row.length >= columns && row[0])
+            .map(row => row.slice(0, columns).join(','));
+          
+          setInput(lines.join('\n'));
+          message.success(`已解析 ${lines.length} 条数据`);
+        } catch (err) {
+          message.error('Excel文件解析失败');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        setInput(text);
+      };
+      reader.readAsText(file);
+    }
+    return false;
+  };
+
+  // 导入平台产品
+  const handleImportProducts = async () => {
+    if (!selectedChannelId) {
+      message.warning('请选择来源渠道');
+      return;
+    }
+
+    const lines = importProductInput.split('\n').filter(l => l.trim());
+    const products: { sku: string; platformSku?: string }[] = [];
+    
+    for (const line of lines) {
+      const parts = line.split(/[,，\t]/).map(s => s.trim());
+      if (parts.length >= 1 && parts[0]) {
+        products.push({ 
+          sku: parts[0], 
+          platformSku: parts[1] || undefined 
+        });
+      }
+    }
+
+    if (products.length === 0) {
+      message.warning('请输入有效的产品数据');
+      return;
+    }
+
+    setImportProductLoading(true);
+    try {
+      const res: any = await productApi.importProducts(shopId!, {
+        channelId: selectedChannelId,
+        products,
+      });
+      message.success(res.message || `成功导入 ${res.created} 个商品`);
+      setImportProductModal(false);
+      setImportProductInput('');
+      setSelectedChannelId('');
+      loadData();
+    } catch (e: any) {
+      message.error(e.message || '导入失败');
+    } finally {
+      setImportProductLoading(false);
+    }
+  };
+
   const columns = [
     { title: 'SKU', dataIndex: 'sku', key: 'sku', width: 120 },
+    { 
+      title: '平台SKU', 
+      dataIndex: 'platformSku', 
+      key: 'platformSku', 
+      width: 140,
+      render: (v: string, record: any) => (
+        <Space size="small">
+          <span style={{ color: v ? undefined : '#999' }}>{v || '-'}</span>
+          <Button 
+            type="link" 
+            size="small" 
+            icon={<EditOutlined />} 
+            onClick={() => setEditingPlatformSku({ id: record.id, sku: record.sku, platformSku: v || '' })}
+          />
+        </Space>
+      )
+    },
     { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true },
     { title: '本地价格', dataIndex: 'originalPrice', key: 'originalPrice', width: 90, render: (v: number) => `$${v}` },
     { title: '平台价格', dataIndex: 'finalPrice', key: 'finalPrice', width: 90, render: (v: number) => `$${v}` },
@@ -352,6 +512,12 @@ export default function ShopProducts() {
           <Button type="primary" onClick={() => setSyncMissingModal(true)}>
             补充同步SKU
           </Button>
+          <Button icon={<UploadOutlined />} onClick={() => setPlatformSkuModal(true)}>
+            导入平台SKU
+          </Button>
+          <Button icon={<ImportOutlined />} onClick={() => setImportProductModal(true)}>
+            导入平台产品
+          </Button>
           <Dropdown
             menu={{
               items: [
@@ -446,6 +612,99 @@ export default function ShopProducts() {
         />
         <div style={{ marginTop: 8, color: '#999' }}>
           当前输入: {syncMissingInput.split(/[\n,，\s]+/).filter(s => s.trim()).length} 个SKU
+        </div>
+      </Modal>
+
+      <Modal
+        title="导入平台SKU映射"
+        open={platformSkuModal}
+        onCancel={() => { setPlatformSkuModal(false); setPlatformSkuInput(''); }}
+        onOk={handleImportPlatformSku}
+        okText="导入"
+        confirmLoading={platformSkuLoading}
+        width={600}
+      >
+        <p style={{ marginBottom: 12, color: '#666' }}>
+          格式：每行一条映射，原始SKU和平台SKU用逗号或Tab分隔
+          <br />
+          <small>示例：ABC123,ABC123-US</small>
+        </p>
+        <Upload.Dragger
+          accept=".csv,.txt,.xlsx,.xls"
+          showUploadList={false}
+          beforeUpload={(file) => handleFileUpload(file, setPlatformSkuInput, 2)}
+          style={{ marginBottom: 12 }}
+        >
+          <p className="ant-upload-drag-icon"><UploadOutlined style={{ fontSize: 32, color: '#1890ff' }} /></p>
+          <p>点击或拖拽文件到此处（支持 CSV/TXT/Excel）</p>
+        </Upload.Dragger>
+        <TextArea
+          rows={10}
+          placeholder="原始SKU,平台SKU&#10;ABC123,ABC123-US&#10;DEF456,MYSTORE-DEF456"
+          value={platformSkuInput}
+          onChange={e => setPlatformSkuInput(e.target.value)}
+        />
+        <div style={{ marginTop: 8, color: '#999' }}>
+          当前输入: {platformSkuInput.split('\n').filter(l => l.trim() && l.includes(',')).length} 条映射
+        </div>
+      </Modal>
+
+      <Modal
+        title={`编辑平台SKU - ${editingPlatformSku?.sku}`}
+        open={!!editingPlatformSku}
+        onCancel={() => setEditingPlatformSku(null)}
+        onOk={handleSavePlatformSku}
+        okText="保存"
+      >
+        <div style={{ marginBottom: 8 }}>原始SKU: <strong>{editingPlatformSku?.sku}</strong></div>
+        <Input
+          placeholder="输入平台SKU，留空则使用原始SKU"
+          value={editingPlatformSku?.platformSku || ''}
+          onChange={e => setEditingPlatformSku(prev => prev ? { ...prev, platformSku: e.target.value } : null)}
+        />
+      </Modal>
+
+      <Modal
+        title="导入平台产品"
+        open={importProductModal}
+        onCancel={() => { setImportProductModal(false); setImportProductInput(''); setSelectedChannelId(''); }}
+        onOk={handleImportProducts}
+        okText="导入"
+        confirmLoading={importProductLoading}
+        width={650}
+      >
+        <p style={{ marginBottom: 12, color: '#666' }}>
+          从沃尔玛下载的商品表格导入到本店铺，用于自动同步时获取渠道最新价格库存。
+          <br />
+          <small>格式：SKU, 平台SKU（可选）。每行一条，用逗号或Tab分隔。</small>
+        </p>
+        <div style={{ marginBottom: 12 }}>
+          <span style={{ marginRight: 8 }}>来源渠道：</span>
+          <Select
+            style={{ width: 200 }}
+            placeholder="选择来源渠道"
+            value={selectedChannelId || undefined}
+            onChange={setSelectedChannelId}
+            options={channels.map(c => ({ value: c.id, label: c.name }))}
+          />
+        </div>
+        <Upload.Dragger
+          accept=".csv,.txt,.xlsx,.xls"
+          showUploadList={false}
+          beforeUpload={(file) => handleFileUpload(file, setImportProductInput, 2)}
+          style={{ marginBottom: 12 }}
+        >
+          <p className="ant-upload-drag-icon"><UploadOutlined style={{ fontSize: 32, color: '#1890ff' }} /></p>
+          <p>点击或拖拽文件到此处（支持 CSV/TXT/Excel）</p>
+        </Upload.Dragger>
+        <TextArea
+          rows={10}
+          placeholder="SKU,平台SKU&#10;ABC123,ABC123-US&#10;DEF456&#10;GHI789,MYSTORE-GHI789"
+          value={importProductInput}
+          onChange={e => setImportProductInput(e.target.value)}
+        />
+        <div style={{ marginTop: 8, color: '#999' }}>
+          当前输入: {importProductInput.split('\n').filter(l => l.trim()).length} 条产品
         </div>
       </Modal>
     </div>

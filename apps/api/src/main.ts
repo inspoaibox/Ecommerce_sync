@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -8,6 +9,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors();
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
 
   const config = new DocumentBuilder()

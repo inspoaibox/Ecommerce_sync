@@ -53,7 +53,8 @@ export const shopApi = {
   syncToWalmart: (id: string, data: { productIds: string[]; syncType: 'price' | 'inventory' | 'both' }) =>
     api.post(`/shops/${id}/sync-to-walmart`, data),
   // Feed管理
-  getFeeds: (id: string, params?: any) => api.get(`/shops/${id}/feeds`, { params }),
+  getFeeds: (id: string | undefined, params?: any) => 
+    id ? api.get(`/shops/${id}/feeds`, { params }) : api.get('/shops/feeds', { params }),
   refreshFeedStatus: (id: string, feedId: string) => api.post(`/shops/${id}/feeds/${feedId}/refresh`),
   getFeedDetail: (id: string, feedId: string) => api.get(`/shops/${id}/feeds/${feedId}/detail`),
   // 同步任务管理
@@ -63,6 +64,9 @@ export const shopApi = {
   cancelSyncTask: (taskId: string, force?: boolean) => api.post(`/shops/sync-task/${taskId}/cancel`, null, { params: { force } }),
   deleteSyncTask: (taskId: string) => api.delete(`/shops/sync-task/${taskId}`),
   retrySyncTask: (taskId: string) => api.post(`/shops/sync-task/${taskId}/retry`),
+  // 同步配置
+  getSyncConfig: (id: string) => api.get(`/shops/${id}/sync-config`),
+  updateSyncConfig: (id: string, config: any) => api.put(`/shops/${id}/sync-config`, config),
 };
 
 // 同步规则
@@ -99,6 +103,11 @@ export const productApi = {
   assignToShop: (ids: string[], shopId: string) => api.post('/products/assign-shop', { ids, shopId }),
   syncFromChannel: (channelId: string, products: any[], shopId?: string) => 
     api.post('/products/sync-from-channel', { channelId, products, shopId }),
+  updatePlatformSku: (id: string, platformSku: string) => api.put(`/products/${id}/platform-sku`, { platformSku }),
+  importPlatformSku: (shopId: string, mappings: { sku: string; platformSku: string }[]) =>
+    api.post(`/products/import-platform-sku/${shopId}`, { mappings }),
+  importProducts: (shopId: string, data: { channelId: string; products: { sku: string; platformSku?: string }[] }) =>
+    api.post(`/products/import-products/${shopId}`, data),
 };
 
 // 同步日志
@@ -113,6 +122,18 @@ export const dashboardApi = {
   overview: () => api.get('/dashboard/overview'),
   syncStats: () => api.get('/dashboard/sync-stats'),
   recentLogs: (limit?: number) => api.get('/dashboard/recent-logs', { params: { limit } }),
+};
+
+// 自动同步
+export const autoSyncApi = {
+  getConfigs: () => api.get('/auto-sync/configs'),
+  getConfig: (shopId: string) => api.get(`/auto-sync/config/${shopId}`),
+  updateConfig: (shopId: string, data: any) => api.put(`/auto-sync/config/${shopId}`, data),
+  triggerSync: (shopId: string, syncType?: string) => api.post(`/auto-sync/trigger/${shopId}`, { syncType }),
+  getTasks: (params?: any) => api.get('/auto-sync/tasks', { params }),
+  getTask: (taskId: string) => api.get(`/auto-sync/task/${taskId}`),
+  cancelTask: (taskId: string) => api.post(`/auto-sync/task/${taskId}/cancel`),
+  deleteTask: (taskId: string) => api.delete(`/auto-sync/task/${taskId}`),
 };
 
 export default api;

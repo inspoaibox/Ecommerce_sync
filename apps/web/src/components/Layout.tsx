@@ -6,12 +6,12 @@ import {
   DashboardOutlined,
   ApiOutlined,
   ShopOutlined,
-  SyncOutlined,
   FileTextOutlined,
   SearchOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
   CloudSyncOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
 
@@ -57,15 +57,14 @@ export default function Layout() {
       label: '平台店铺',
       children: [
         { key: '/shops/list', label: '店铺列表' },
-        { key: '/shops/sync-tasks', label: '同步记录' },
-        { key: '/shops/feed-status', icon: <CloudSyncOutlined />, label: 'Feed状态' },
         ...shops.map((shop) => ({
           key: `/shops/${shop.id}/products`,
           label: shop.name,
         })),
+        { key: '/shops/auto-sync', icon: <SyncOutlined />, label: '自动同步' },
+        { key: '/shops/feed-status', icon: <CloudSyncOutlined />, label: 'Feed状态' },
       ],
     },
-    { key: '/sync-rules', icon: <SyncOutlined />, label: '同步规则' },
     { key: '/sync-logs', icon: <FileTextOutlined />, label: '同步日志' },
   ];
 
@@ -76,13 +75,13 @@ export default function Layout() {
     if (path.includes('/shops/') && path.includes('/products')) {
       return [path];
     }
-    // 同步记录页面
-    if (path === '/shops/sync-tasks') {
-      return ['/shops/sync-tasks'];
-    }
     // Feed状态页面
     if (path === '/shops/feed-status') {
       return ['/shops/feed-status'];
+    }
+    // 自动同步页面
+    if (path === '/shops/auto-sync') {
+      return ['/shops/auto-sync'];
     }
     // 店铺列表页面
     if (path === '/shops/list') {

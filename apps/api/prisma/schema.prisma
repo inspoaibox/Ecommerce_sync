@@ -56,6 +56,7 @@ model Channel {
 
   syncRules  SyncRule[]
   warehouses ChannelWarehouse[]
+  products   Product[]
 
   @@map("channels")
 }
@@ -101,17 +102,20 @@ model Shop {
   name           String   @db.VarChar(100)
   code           String   @unique @db.VarChar(50)
   apiCredentials Json     @map("api_credentials")
+  syncConfig     Json?    @map("sync_config") // 同步规则配置（价格倍率、库存倍率等）
   region         String?  @db.VarChar(50)
   description    String?  @db.Text
   status         Status   @default(active)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  platform    Platform       @relation(fields: [platformId], references: [id])
-  syncRules   SyncRule[]
-  products    Product[]
-  syncTasks   ShopSyncTask[]
-  feedRecords FeedRecord[]
+  platform       Platform        @relation(fields: [platformId], references: [id])
+  syncRules      SyncRule[]
+  products       Product[]
+  syncTasks      ShopSyncTask[]
+  feedRecords    FeedRecord[]
+  autoSyncConfig AutoSyncConfig?
+  autoSyncTasks  AutoSyncTask[]
 
   @@map("shops")
 }
@@ -149,8 +153,10 @@ model Product {
   id                String     @id @default(uuid())
   syncRuleId        String?    @map("sync_rule_id")
   shopId            String?    @map("shop_id")
+  channelId         String?    @map("channel_id")
   channelProductId  String     @map("channel_product_id") @db.VarChar(100)
   sku               String     @db.VarChar(100)
+  platformSku       String?    @map("platform_sku") @db.VarChar(100) // 平台SKU，为空时使用sku
   title             String     @db.VarChar(500)
   originalPrice     Decimal    @map("original_price") @db.Decimal(10, 2)
   finalPrice        Decimal    @map("final_price") @db.Decimal(10, 2)
@@ -169,6 +175,7 @@ model Product {
 
   syncRule SyncRule? @relation(fields: [syncRuleId], references: [id])
   shop     Shop?     @relation(fields: [shopId], references: [id])
+  channel  Channel?  @relation(fields: [channelId], references: [id])
 
   @@unique([shopId, sourceChannel, sku])
   @@map("products")
@@ -239,6 +246,55 @@ enum FeedSyncType {
   price
   inventory
   both
+}
+
+// 自动同步配置表
+model AutoSyncConfig {
+  id           String    @id @default(uuid())
+  shopId       String    @unique @map("shop_id")
+  enabled      Boolean   @default(false)
+  intervalDays Int       @default(1) @map("interval_days") // 1/2/3/5/7
+  syncType     String    @default("both") @map("sync_type") // price/inventory/both
+  lastSyncAt   DateTime? @map("last_sync_at")
+  nextSyncAt   DateTime? @map("next_sync_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("auto_sync_configs")
+}
+
+enum AutoSyncStage {
+  fetch_channel
+  update_local
+  push_platform
+  completed
+  failed
+  cancelled
+}
+
+// 自动同步任务表
+model AutoSyncTask {
+  id             String        @id @default(uuid())
+  shopId         String        @map("shop_id")
+  syncType       String        @default("both") @map("sync_type") // price/inventory/both
+  stage          AutoSyncStage @default(fetch_channel)
+  channelStats   Json?         @map("channel_stats") // { channelId: { total, fetched, status } }
+  localUpdated   Int           @default(0) @map("local_updated")
+  platformFeedId String?       @map("platform_feed_id")
+  platformStatus String?       @map("platform_status")
+  totalProducts  Int           @default(0) @map("total_products")
+  successCount   Int           @default(0) @map("success_count")
+  failCount      Int           @default(0) @map("fail_count")
+  errorMessage   String?       @map("error_message") @db.Text
+  startedAt      DateTime      @default(now()) @map("started_at")
+  finishedAt     DateTime?     @map("finished_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@map("auto_sync_tasks")
 }
 
 // Feed同步记录表 - 跟踪沃尔玛Feed状态

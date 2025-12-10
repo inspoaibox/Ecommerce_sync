@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { Table, Button, Space, Modal, Form, Input, Select, message, Popconfirm, Tag } from 'antd';
-import { PlusOutlined, ApiOutlined, SyncOutlined } from '@ant-design/icons';
+import { PlusOutlined, ApiOutlined, SyncOutlined, SettingOutlined } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
+import SyncConfigModal from '@/components/SyncConfigModal';
 
 // 预设平台配置
 const PLATFORM_PRESETS: Record<string, {
@@ -108,6 +109,11 @@ export default function ShopList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('');
+  const [syncConfigModal, setSyncConfigModal] = useState<{ open: boolean; shopId: string; shopName: string }>({
+    open: false,
+    shopId: '',
+    shopName: '',
+  });
   const [form] = Form.useForm();
   const { refreshShops } = useOutletContext<{ refreshShops: () => void }>();
   const navigate = useNavigate();
@@ -259,13 +265,14 @@ export default function ShopList() {
     },
     { title: '区域', dataIndex: 'region', key: 'region' },
     { title: '状态', dataIndex: 'status', key: 'status', render: (s: string) => <Tag color={s === 'active' ? 'green' : 'default'}>{s === 'active' ? '启用' : '禁用'}</Tag> },
-    { title: '操作', key: 'action', width: 280, render: (_: any, record: any) => (
+    { title: '操作', key: 'action', width: 350, render: (_: any, record: any) => (
       <Space>
         <Button type="link" size="small" onClick={() => handleEdit(record)}>编辑</Button>
         <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id)}>
           <Button type="link" size="small" danger>删除</Button>
         </Popconfirm>
         <Button type="link" size="small" icon={<ApiOutlined />} onClick={() => handleTest(record.id)}>测试</Button>
+        <Button type="link" size="small" icon={<SettingOutlined />} onClick={() => setSyncConfigModal({ open: true, shopId: record.id, shopName: record.name })}>同步规则</Button>
         <Popconfirm title="确定从平台同步商品到本地？" onConfirm={() => handleSyncProducts(record.id)}>
           <Button type="link" size="small" icon={<SyncOutlined />}>同步商品</Button>
         </Popconfirm>
@@ -349,6 +356,13 @@ export default function ShopList() {
         </Form>
       </Modal>
 
+      {/* 同步规则配置弹窗 */}
+      <SyncConfigModal
+        open={syncConfigModal.open}
+        shopId={syncConfigModal.shopId}
+        shopName={syncConfigModal.shopName}
+        onClose={() => setSyncConfigModal({ open: false, shopId: '', shopName: '' })}
+      />
     </div>
   );
 }

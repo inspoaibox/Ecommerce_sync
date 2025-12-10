@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { CreateShopDto, UpdateShopDto } from './dto/shop.dto';
+import { ShopSyncConfigDto, DEFAULT_SYNC_CONFIG, PriceTierDto } from './dto/sync-config.dto';
 import { PaginationDto, PaginatedResult } from '@/common/dto/pagination.dto';
 import { Shop } from '@prisma/client';
 import { PlatformAdapterFactory, PLATFORM_CONFIGS } from '@/adapters/platforms';
@@ -368,41 +369,77 @@ export class ShopService {
     }
 
     try {
+      // 获取店铺同步配置
+      const syncConfig = await this.getSyncConfig(id);
+      
       let feedId: string | undefined;
       const feedIds: string[] = [];
 
-      // 同步价格
+      // 同步价格 - 使用 platformSku 或 sku
+      // 跳过价格为空/null/0的商品
       if (syncType === 'price' || syncType === 'both') {
-        const priceItems = products.map(p => ({
-          sku: p.sku,
-          price: p.finalPrice,
-          msrp: p.originalPrice, // 使用原价作为MSRP
-        }));
+        const priceItems = products
+          .filter(p => {
+            // 检查价格来源是否有效
+            const sourcePrice = syncConfig.price.source === 'local' && p.localPrice !== null
+              ? Number(p.localPrice)
+              : Number(p.originalPrice);
+            return sourcePrice > 0; // 跳过价格为空或0的商品
+          })
+          .map(p => {
+            // 根据配置选择价格来源
+            let sourcePrice: number;
+            if (syncConfig.price.source === 'local' && p.localPrice !== null) {
+              sourcePrice = Number(p.localPrice);
+            } else {
+              sourcePrice = Number(p.originalPrice);
+            }
+            
+            // 应用价格计算规则
+            const calculatedPrice = this.calculateFinalPrice(sourcePrice, syncConfig);
+            
+            return {
+              sku: p.platformSku || p.sku, // 优先使用平台SKU
+              price: calculatedPrice,
+              msrp: Number(p.originalPrice) || calculatedPrice, // 使用原价作为MSRP，为空则用计算价格
+            };
+          });
 
-        const priceResult = await adapter.batchUpdatePrices(priceItems);
-        feedId = priceResult.feedId;
-        feedIds.push(priceResult.feedId);
+        if (priceItems.length === 0) {
+          console.log(`[Shop ${id}] No valid price items to sync (all prices are empty or 0)`);
+        } else {
+          const priceResult = await adapter.batchUpdatePrices(priceItems);
+          feedId = priceResult.feedId;
+          feedIds.push(priceResult.feedId);
 
-        console.log(`[Shop ${id}] Price feed submitted: ${priceResult.feedId}`);
+          console.log(`[Shop ${id}] Price feed submitted: ${priceResult.feedId}, items: ${priceItems.length}`);
 
-        // 保存价格Feed记录
-        await this.prisma.feedRecord.create({
-          data: {
-            shopId: id,
-            feedId: priceResult.feedId,
-            syncType: 'price',
-            itemCount: products.length,
-            status: 'RECEIVED',
-          },
-        });
+          // 保存价格Feed记录
+          await this.prisma.feedRecord.create({
+            data: {
+              shopId: id,
+              feedId: priceResult.feedId,
+              syncType: 'price',
+              itemCount: priceItems.length,
+              status: 'RECEIVED',
+            },
+          });
+        }
       }
 
-      // 同步库存
+      // 同步库存 - 使用 platformSku 或 sku
+      // 库存为空/null时当作0处理
       if (syncType === 'inventory' || syncType === 'both') {
-        const inventoryItems = products.map(p => ({
-          sku: p.sku,
-          quantity: p.finalStock,
-        }));
+        const inventoryItems = products.map(p => {
+          // 库存为空时当作0处理
+          const originalStock = p.originalStock ?? 0;
+          const calculatedStock = this.calculateFinalStock(originalStock, syncConfig);
+          
+          return {
+            sku: p.platformSku || p.sku, // 优先使用平台SKU
+            quantity: calculatedStock,
+          };
+        });
 
         const inventoryResult = await adapter.batchUpdateInventory(inventoryItems);
         feedId = inventoryResult.feedId;
@@ -455,8 +492,27 @@ export class ShopService {
         skip,
         take: pageSize,
         orderBy: { createdAt: 'desc' },
+        include: { shop: { select: { id: true, name: true } } },
       }),
       this.prisma.feedRecord.count({ where: { shopId } }),
+    ]);
+
+    return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+
+  // 获取所有店铺的Feed记录列表
+  async getAllFeeds(query: PaginationDto) {
+    const { page = 1, pageSize = 20 } = query;
+    const skip = (page - 1) * pageSize;
+
+    const [data, total] = await Promise.all([
+      this.prisma.feedRecord.findMany({
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+        include: { shop: { select: { id: true, name: true } } },
+      }),
+      this.prisma.feedRecord.count(),
     ]);
 
     return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
@@ -539,5 +595,74 @@ export class ShopService {
       console.error(`[Shop ${shopId}] Get feed detail failed:`, error);
       throw new Error(error.message || '获取Feed详情失败');
     }
+  }
+
+  // 获取店铺同步配置
+  async getSyncConfig(shopId: string): Promise<ShopSyncConfigDto> {
+    const shop = await this.findOne(shopId);
+    const config = shop.syncConfig as ShopSyncConfigDto | null;
+    return config || DEFAULT_SYNC_CONFIG;
+  }
+
+  // 更新店铺同步配置
+  async updateSyncConfig(shopId: string, config: ShopSyncConfigDto): Promise<ShopSyncConfigDto> {
+    await this.findOne(shopId);
+    
+    // 对价格区间按 minPrice 升序排序
+    if (config.price?.tiers) {
+      config.price.tiers.sort((a, b) => a.minPrice - b.minPrice);
+    }
+
+    await this.prisma.shop.update({
+      where: { id: shopId },
+      data: { syncConfig: config as any },
+    });
+
+    return config;
+  }
+
+  // 根据同步配置计算最终价格
+  calculateFinalPrice(originalPrice: number, config: ShopSyncConfigDto): number {
+    if (!config.price?.enabled) {
+      return originalPrice;
+    }
+
+    const tiers = config.price.tiers || [];
+    
+    // 查找匹配的区间：价格 >= minPrice 且 (maxPrice 为空 或 价格 < maxPrice)
+    for (const tier of tiers) {
+      const inRange = originalPrice >= tier.minPrice && 
+        (tier.maxPrice === null || originalPrice < tier.maxPrice);
+      
+      if (inRange) {
+        const result = originalPrice * tier.multiplier + tier.adjustment;
+        return Math.round(result * 100) / 100; // 保留两位小数
+      }
+    }
+
+    // 无匹配区间，使用默认值
+    const result = originalPrice * config.price.defaultMultiplier + config.price.defaultAdjustment;
+    return Math.round(result * 100) / 100;
+  }
+
+  // 根据同步配置计算最终库存
+  calculateFinalStock(originalStock: number, config: ShopSyncConfigDto): number {
+    if (!config.inventory?.enabled) {
+      return originalStock;
+    }
+
+    let finalStock = Math.floor(originalStock * config.inventory.multiplier + config.inventory.adjustment);
+
+    // 应用最小库存限制
+    if (finalStock < config.inventory.minStock) {
+      finalStock = 0;
+    }
+
+    // 应用最大库存限制
+    if (config.inventory.maxStock !== null && finalStock > config.inventory.maxStock) {
+      finalStock = config.inventory.maxStock;
+    }
+
+    return Math.max(0, finalStock);
   }
 }

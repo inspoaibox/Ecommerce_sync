@@ -130,6 +130,97 @@ export class ProductService {
     return { count: result.count };
   }
 
+  // 更新单个商品的平台SKU
+  async updatePlatformSku(id: string, platformSku: string): Promise<Product> {
+    await this.findOne(id);
+    return this.prisma.product.update({
+      where: { id },
+      data: { platformSku: platformSku || null },
+    });
+  }
+
+  // 批量导入平台SKU映射
+  async importPlatformSku(shopId: string, mappings: { sku: string; platformSku: string }[]): Promise<{ updated: number; notFound: string[] }> {
+    let updated = 0;
+    const notFound: string[] = [];
+
+    for (const { sku, platformSku } of mappings) {
+      const product = await this.prisma.product.findFirst({
+        where: { shopId, sku },
+      });
+
+      if (product) {
+        await this.prisma.product.update({
+          where: { id: product.id },
+          data: { platformSku },
+        });
+        updated++;
+      } else {
+        notFound.push(sku);
+      }
+    }
+
+    return { updated, notFound };
+  }
+
+  // 导入平台产品（从沃尔玛表格导入）
+  async importProducts(
+    shopId: string,
+    channelId: string,
+    products: { sku: string; platformSku?: string }[],
+  ): Promise<{ created: number; updated: number; message: string }> {
+    // 验证渠道存在
+    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } });
+    if (!channel) throw new NotFoundException('渠道不存在');
+
+    let created = 0;
+    let updated = 0;
+
+    for (const item of products) {
+      // 查找是否已存在
+      const existing = await this.prisma.product.findFirst({
+        where: { shopId, sku: item.sku },
+      });
+
+      if (existing) {
+        // 更新渠道ID和平台SKU
+        await this.prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            channelId,
+            platformSku: item.platformSku || existing.platformSku,
+          },
+        });
+        updated++;
+      } else {
+        // 创建新商品
+        await this.prisma.product.create({
+          data: {
+            sku: item.sku,
+            platformSku: item.platformSku || null,
+            channelId,
+            shopId,
+            channelProductId: item.sku,
+            title: item.sku, // 暂用SKU作为标题
+            originalPrice: 0,
+            finalPrice: 0,
+            originalStock: 0,
+            finalStock: 0,
+            sourceChannel: channel.name,
+            syncStatus: 'pending',
+          },
+        });
+        created++;
+      }
+    }
+
+    return {
+      created,
+      updated,
+      message: `导入完成：新增 ${created} 个，更新 ${updated} 个`,
+    };
+  }
+
   async syncFromChannel(dto: SyncFromChannelDto): Promise<{ created: number; updated: number }> {
     const { channelId, products, shopId } = dto;
     
@@ -155,6 +246,7 @@ export class ProductService {
         localPrice: localPrice,
         localStock: product.stock || 0,
         currency: product.currency || 'USD',
+        channelId: channelId,
         sourceChannel: channel.name,
         extraFields: product.extraFields || {},
         shopId: shopId || null,

@@ -55,4 +55,28 @@ export class ProductController {
   syncFromChannel(@Body() dto: SyncFromChannelDto) {
     return this.productService.syncFromChannel(dto);
   }
+
+  @Put(':id/platform-sku')
+  @ApiOperation({ summary: '更新商品平台SKU' })
+  updatePlatformSku(@Param('id') id: string, @Body() body: { platformSku: string }) {
+    return this.productService.updatePlatformSku(id, body.platformSku);
+  }
+
+  @Post('import-platform-sku/:shopId')
+  @ApiOperation({ summary: '批量导入平台SKU映射' })
+  importPlatformSku(
+    @Param('shopId') shopId: string,
+    @Body() body: { mappings: { sku: string; platformSku: string }[] },
+  ) {
+    return this.productService.importPlatformSku(shopId, body.mappings);
+  }
+
+  @Post('import-products/:shopId')
+  @ApiOperation({ summary: '导入平台产品' })
+  importProducts(
+    @Param('shopId') shopId: string,
+    @Body() body: { channelId: string; products: { sku: string; platformSku?: string }[] },
+  ) {
+    return this.productService.importProducts(shopId, body.channelId, body.products);
+  }
 }
