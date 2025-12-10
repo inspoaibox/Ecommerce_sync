@@ -23,9 +23,7 @@ export default function ShopProducts() {
   const [syncMissingInput, setSyncMissingInput] = useState('');
   const [syncMissingLoading, setSyncMissingLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
-  const [platformSkuModal, setPlatformSkuModal] = useState(false);
-  const [platformSkuInput, setPlatformSkuInput] = useState('');
-  const [platformSkuLoading, setPlatformSkuLoading] = useState(false);
+  const [fetchLatestLoading, setFetchLatestLoading] = useState(false);
   const [editingPlatformSku, setEditingPlatformSku] = useState<{ id: string; sku: string; platformSku: string } | null>(null);
   const [importProductModal, setImportProductModal] = useState(false);
   const [importProductInput, setImportProductInput] = useState('');
@@ -266,34 +264,27 @@ export default function ShopProducts() {
     }
   };
 
-  // 导入平台SKU映射
-  const handleImportPlatformSku = async () => {
-    const lines = platformSkuInput.split('\n').filter(l => l.trim());
-    const mappings: { sku: string; platformSku: string }[] = [];
+  // 从渠道获取最新数据
+  const handleFetchLatest = async (fetchType: 'price' | 'inventory' | 'both') => {
+    const productIds = selectedRowKeys.length > 0 ? selectedRowKeys : undefined;
+    const count = productIds ? productIds.length : pagination.total;
     
-    for (const line of lines) {
-      const parts = line.split(/[,，\t]/).map(s => s.trim());
-      if (parts.length >= 2 && parts[0] && parts[1]) {
-        mappings.push({ sku: parts[0], platformSku: parts[1] });
-      }
-    }
-
-    if (mappings.length === 0) {
-      message.warning('请输入有效的SKU映射，格式：原始SKU,平台SKU');
+    if (count === 0) {
+      message.warning('没有可获取的商品');
       return;
     }
 
-    setPlatformSkuLoading(true);
+    setFetchLatestLoading(true);
+    message.loading({ content: `正在从渠道获取最新数据，共 ${count} 个商品...`, key: 'fetchLatest', duration: 0 });
+    
     try {
-      const res: any = await productApi.importPlatformSku(shopId!, mappings);
-      message.success(res.message || `成功更新 ${res.updated} 个商品的平台SKU`);
-      setPlatformSkuModal(false);
-      setPlatformSkuInput('');
+      const res: any = await productApi.fetchLatestFromChannel(shopId!, { productIds, fetchType });
+      message.success({ content: res.message || '获取完成', key: 'fetchLatest' });
       loadData();
     } catch (e: any) {
-      message.error(e.message || '导入失败');
+      message.error({ content: e.message || '获取失败', key: 'fetchLatest' });
     } finally {
-      setPlatformSkuLoading(false);
+      setFetchLatestLoading(false);
     }
   };
 
@@ -395,7 +386,7 @@ export default function ShopProducts() {
       title: '平台SKU', 
       dataIndex: 'platformSku', 
       key: 'platformSku', 
-      width: 140,
+      width: 130,
       render: (v: string, record: any) => (
         <Space size="small">
           <span style={{ color: v ? undefined : '#999' }}>{v || '-'}</span>
@@ -408,11 +399,26 @@ export default function ShopProducts() {
         </Space>
       )
     },
-    { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true },
-    { title: '本地价格', dataIndex: 'originalPrice', key: 'originalPrice', width: 90, render: (v: number) => `$${v}` },
-    { title: '平台价格', dataIndex: 'finalPrice', key: 'finalPrice', width: 90, render: (v: number) => `$${v}` },
-    { title: '本地库存', dataIndex: 'originalStock', key: 'originalStock', width: 90 },
-    { title: '平台库存', dataIndex: 'finalStock', key: 'finalStock', width: 90 },
+    { title: '来源渠道', dataIndex: 'sourceChannel', key: 'sourceChannel', width: 100, render: (v: string) => v || '-' },
+    { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true, width: 120 },
+    { title: '原价', dataIndex: 'originalPrice', key: 'originalPrice', width: 65, render: (v: number) => v != null ? `$${v}` : '-' },
+    { title: '优惠价', key: 'discountedPrice', width: 70, render: (_: any, r: any) => {
+      const dp = r.extraFields?.discountedPrice;
+      return dp != null ? <span style={{ color: '#f5222d' }}>${dp}</span> : '-';
+    }},
+    { title: '运费', key: 'shippingFee', width: 55, render: (_: any, r: any) => {
+      const fee = r.extraFields?.shippingFee;
+      return fee != null ? `$${fee}` : '-';
+    }},
+    { title: '总价', dataIndex: 'localPrice', key: 'localPrice', width: 65, render: (v: number) => v != null ? `$${v}` : '-' },
+    { title: '优惠总价', key: 'discountedTotalPrice', width: 75, render: (_: any, r: any) => {
+      const dp = r.extraFields?.discountedPrice;
+      const fee = r.extraFields?.shippingFee || 0;
+      return dp != null ? <span style={{ color: '#f5222d' }}>${(dp + fee).toFixed(2)}</span> : '-';
+    }},
+    { title: '库存', dataIndex: 'originalStock', key: 'originalStock', width: 55 },
+    { title: '平台价格', dataIndex: 'finalPrice', key: 'finalPrice', width: 75, render: (v: number) => `$${v}` },
+    { title: '平台库存', dataIndex: 'finalStock', key: 'finalStock', width: 75 },
     { title: '同步状态', dataIndex: 'syncStatus', key: 'syncStatus', width: 100, render: (s: string) => (
       <Tag color={s === 'synced' ? 'green' : s === 'failed' ? 'red' : 'default'}>{s}</Tag>
     )},
@@ -512,12 +518,23 @@ export default function ShopProducts() {
           <Button type="primary" onClick={() => setSyncMissingModal(true)}>
             补充同步SKU
           </Button>
-          <Button icon={<UploadOutlined />} onClick={() => setPlatformSkuModal(true)}>
-            导入平台SKU
-          </Button>
           <Button icon={<ImportOutlined />} onClick={() => setImportProductModal(true)}>
             导入平台产品
           </Button>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'price', label: '获取最新价格', icon: <DollarOutlined /> },
+                { key: 'inventory', label: '获取最新库存', icon: <InboxOutlined /> },
+                { key: 'both', label: '获取价格+库存', icon: <SyncOutlined /> },
+              ],
+              onClick: ({ key }) => handleFetchLatest(key as 'price' | 'inventory' | 'both'),
+            }}
+          >
+            <Button icon={<SyncOutlined />} loading={fetchLatestLoading}>
+              获取最新数据 {selectedRowKeys.length > 0 ? `(${selectedRowKeys.length})` : '(全部)'} <DownOutlined />
+            </Button>
+          </Dropdown>
           <Dropdown
             menu={{
               items: [
@@ -612,40 +629,6 @@ export default function ShopProducts() {
         />
         <div style={{ marginTop: 8, color: '#999' }}>
           当前输入: {syncMissingInput.split(/[\n,，\s]+/).filter(s => s.trim()).length} 个SKU
-        </div>
-      </Modal>
-
-      <Modal
-        title="导入平台SKU映射"
-        open={platformSkuModal}
-        onCancel={() => { setPlatformSkuModal(false); setPlatformSkuInput(''); }}
-        onOk={handleImportPlatformSku}
-        okText="导入"
-        confirmLoading={platformSkuLoading}
-        width={600}
-      >
-        <p style={{ marginBottom: 12, color: '#666' }}>
-          格式：每行一条映射，原始SKU和平台SKU用逗号或Tab分隔
-          <br />
-          <small>示例：ABC123,ABC123-US</small>
-        </p>
-        <Upload.Dragger
-          accept=".csv,.txt,.xlsx,.xls"
-          showUploadList={false}
-          beforeUpload={(file) => handleFileUpload(file, setPlatformSkuInput, 2)}
-          style={{ marginBottom: 12 }}
-        >
-          <p className="ant-upload-drag-icon"><UploadOutlined style={{ fontSize: 32, color: '#1890ff' }} /></p>
-          <p>点击或拖拽文件到此处（支持 CSV/TXT/Excel）</p>
-        </Upload.Dragger>
-        <TextArea
-          rows={10}
-          placeholder="原始SKU,平台SKU&#10;ABC123,ABC123-US&#10;DEF456,MYSTORE-DEF456"
-          value={platformSkuInput}
-          onChange={e => setPlatformSkuInput(e.target.value)}
-        />
-        <div style={{ marginTop: 8, color: '#999' }}>
-          当前输入: {platformSkuInput.split('\n').filter(l => l.trim() && l.includes(',')).length} 条映射
         </div>
       </Modal>
 

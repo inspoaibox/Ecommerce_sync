@@ -47,26 +47,10 @@ export default function ProductQuery() {
   const [progress, setProgress] = useState({ current: 0, total: 0, percent: 0 });
   const abortRef = useRef(false);
 
-  // 赛盈云仓特有参数
-  const [warehouseCode, setWarehouseCode] = useState<string>('SZ0001'); // 默认US区域
-  const [priceType, setPriceType] = useState<'shipping' | 'pickup'>('shipping'); // 默认包邮价格
-  const [warehouses, setWarehouses] = useState<any[]>([]); // 区域列表
-  const [fetchingWarehouses, setFetchingWarehouses] = useState(false);
-
   useEffect(() => {
     loadChannels();
     loadShops();
   }, []);
-
-  // 当选择赛盈云仓时，加载区域列表
-  useEffect(() => {
-    if (selectedChannel) {
-      const channel = channels.find(c => c.id === selectedChannel);
-      if (channel?.type === 'saleyee') {
-        loadWarehouses(selectedChannel);
-      }
-    }
-  }, [selectedChannel, channels]);
 
   const loadChannels = async () => {
     try {
@@ -83,44 +67,6 @@ export default function ProductQuery() {
       setShops(res.data || []);
     } catch (e) {
       console.error(e);
-    }
-  };
-
-  const loadWarehouses = async (channelId: string) => {
-    try {
-      const res: any = await channelApi.getWarehouses(channelId);
-      if (res.success && res.data) {
-        setWarehouses(res.data);
-        // 如果有区域数据，设置第一个为默认值
-        if (res.data.length > 0 && !warehouseCode) {
-          setWarehouseCode(res.data[0].warehouseCode);
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleFetchWarehouses = async () => {
-    if (!selectedChannel) {
-      message.warning('请先选择渠道');
-      return;
-    }
-
-    setFetchingWarehouses(true);
-    try {
-      const res: any = await channelApi.fetchWarehouses(selectedChannel);
-      if (res.success) {
-        message.success(res.message || '获取区域成功');
-        // 重新加载区域列表
-        await loadWarehouses(selectedChannel);
-      } else {
-        message.error(res.message || '获取区域失败');
-      }
-    } catch (e: any) {
-      message.error(e.message || '获取区域失败');
-    } finally {
-      setFetchingWarehouses(false);
     }
   };
 
@@ -164,14 +110,8 @@ export default function ProductQuery() {
       if (abortRef.current) break;
 
       try {
-        // 根据渠道类型传递不同的参数
-        const queryParams: any = { skus: batches[i] };
-        if (channelType === 'saleyee') {
-          queryParams.warehouseCode = warehouseCode;
-          queryParams.priceType = priceType;
-        }
-
-        const res: any = await channelApi.queryProducts(selectedChannel, queryParams.skus, queryParams);
+        // 查询商品（渠道配置中已包含区域和价格类型等默认参数）
+        const res: any = await channelApi.queryProducts(selectedChannel, batches[i]);
         if (res.success && res.data) {
           // 计算总价和优惠总价
           const productsWithTotal = res.data.map((p: any) => {
@@ -362,44 +302,7 @@ export default function ProductQuery() {
               options={channels.map(c => ({ value: c.id, label: c.name }))}
             />
 
-            {/* 赛盈云仓特有选项 */}
-            {selectedChannel && channels.find(c => c.id === selectedChannel)?.type === 'saleyee' && (
-              <>
-                <span style={{ color: '#666' }}>区域：</span>
-                <Select
-                  style={{ width: 200 }}
-                  value={warehouseCode}
-                  onChange={setWarehouseCode}
-                  options={warehouses.length > 0
-                    ? warehouses.map(w => ({
-                        value: w.warehouseCode,
-                        label: `${w.warehouseName} (${w.warehouseCode})`
-                      }))
-                    : [{ value: 'SZ0001', label: 'US (美国)' }]
-                  }
-                  notFoundContent={warehouses.length === 0 ? '暂无区域数据，请点击更新' : undefined}
-                />
-                <Button
-                  type="link"
-                  size="small"
-                  loading={fetchingWarehouses}
-                  onClick={handleFetchWarehouses}
-                  style={{ padding: '0 8px' }}
-                >
-                  更新
-                </Button>
-                <span style={{ color: '#666' }}>价格类型：</span>
-                <Select
-                  style={{ width: 150 }}
-                  value={priceType}
-                  onChange={setPriceType}
-                  options={[
-                    { value: 'shipping', label: '包邮价格' },
-                    { value: 'pickup', label: '自提价格' },
-                  ]}
-                />
-              </>
-            )}
+
           </Space>
           <div>
             <div style={{ marginBottom: 8 }}>

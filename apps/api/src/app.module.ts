@@ -10,6 +10,7 @@ import { ProductModule } from './modules/product/product.module';
 import { SyncLogModule } from './modules/sync-log/sync-log.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AutoSyncModule } from './modules/auto-sync/auto-sync.module';
+import { OperationLogModule } from './modules/operation-log/operation-log.module';
 import { QueuesModule } from './queues/queues.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { QueuesModule } from './queues/queues.module';
       },
     }),
     PrismaModule,
+    OperationLogModule,
     ChannelModule,
     PlatformModule,
     ShopModule,

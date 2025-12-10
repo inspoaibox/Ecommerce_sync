@@ -496,7 +496,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
   } {
     return {
       sku: item.sku || '',
-      title: item.productName || item.sku || '',
+      title: item.productName || '',
       price: item.price?.amount || 0,
       stock: item.inventory?.quantity || 0,
       currency: item.price?.currency || 'USD',

@@ -34,7 +34,9 @@ export class AutoSyncService {
   async updateConfig(shopId: string, data: {
     enabled?: boolean;
     intervalDays?: number;
+    syncHour?: number;
     syncType?: string;
+    useDiscountedPrice?: boolean;
   }) {
     // 检查店铺是否存在
     const shop = await this.prisma.shop.findUnique({ where: { id: shopId } });
@@ -43,8 +45,14 @@ export class AutoSyncService {
     // 计算下次同步时间
     let nextSyncAt: Date | null = null;
     if (data.enabled) {
+      const syncHour = data.syncHour ?? 8;
       nextSyncAt = new Date();
-      nextSyncAt.setDate(nextSyncAt.getDate() + (data.intervalDays || 1));
+      // 设置到指定小时
+      nextSyncAt.setHours(syncHour, 0, 0, 0);
+      // 如果今天的时间已过，设置为明天
+      if (nextSyncAt <= new Date()) {
+        nextSyncAt.setDate(nextSyncAt.getDate() + 1);
+      }
     }
 
     const config = await this.prisma.autoSyncConfig.upsert({
@@ -53,12 +61,14 @@ export class AutoSyncService {
         shopId,
         enabled: data.enabled ?? false,
         intervalDays: data.intervalDays ?? 1,
+        syncHour: data.syncHour ?? 8,
         syncType: data.syncType ?? 'both',
         nextSyncAt,
       },
       update: {
         enabled: data.enabled,
         intervalDays: data.intervalDays,
+        syncHour: data.syncHour,
         syncType: data.syncType,
         nextSyncAt,
       },

@@ -79,4 +79,13 @@ export class ProductController {
   ) {
     return this.productService.importProducts(shopId, body.channelId, body.products);
   }
+
+  @Post('fetch-latest/:shopId')
+  @ApiOperation({ summary: '从渠道获取最新价格库存' })
+  fetchLatestFromChannel(
+    @Param('shopId') shopId: string,
+    @Body() body: { productIds?: string[]; fetchType: 'price' | 'inventory' | 'both' },
+  ) {
+    return this.productService.fetchLatestFromChannel(shopId, body.productIds, body.fetchType);
+  }
 }

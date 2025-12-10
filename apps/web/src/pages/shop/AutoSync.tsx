@@ -28,7 +28,7 @@ export default function AutoSync() {
   const [detailModal, setDetailModal] = useState(false);
   const [selectedShop, setSelectedShop] = useState<any>(null);
   const [selectedTask, setSelectedTask] = useState<any>(null);
-  const [configForm, setConfigForm] = useState({ enabled: false, intervalDays: 1, syncType: 'both' });
+  const [configForm, setConfigForm] = useState({ enabled: false, intervalDays: 1, syncHour: 8, syncType: 'both' });
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
 
   useEffect(() => {
@@ -78,6 +78,7 @@ export default function AutoSync() {
     setConfigForm({
       enabled: config?.enabled || false,
       intervalDays: config?.intervalDays || 1,
+      syncHour: config?.syncHour ?? 8,
       syncType: config?.syncType || 'both',
     });
     setConfigModal(true);
@@ -152,8 +153,9 @@ export default function AutoSync() {
     const config = configs.find(c => c.shopId === shopId);
     if (!config || !config.enabled) return '-';
     const interval = INTERVAL_OPTIONS.find(o => o.value === config.intervalDays)?.label || `每${config.intervalDays}天`;
+    const syncHour = `${(config.syncHour ?? 8).toString().padStart(2, '0')}:00`;
     const syncType = SYNC_TYPE_OPTIONS.find(o => o.value === config.syncType)?.label || config.syncType;
-    return `${interval} / ${syncType}`;
+    return `${interval} ${syncHour} / ${syncType}`;
   };
 
   const getNextSyncTime = (shopId: string) => {
@@ -301,6 +303,18 @@ export default function AutoSync() {
                   value={configForm.intervalDays}
                   onChange={v => setConfigForm({ ...configForm, intervalDays: v })}
                   options={INTERVAL_OPTIONS}
+                />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <span style={{ marginRight: 8 }}>同步时间：</span>
+                <Select
+                  style={{ width: 150 }}
+                  value={configForm.syncHour}
+                  onChange={v => setConfigForm({ ...configForm, syncHour: v })}
+                  options={Array.from({ length: 24 }, (_, i) => ({
+                    value: i,
+                    label: `${i.toString().padStart(2, '0')}:00`,
+                  }))}
                 />
               </div>
               <div>

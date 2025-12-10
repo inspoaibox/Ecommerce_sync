@@ -190,7 +190,7 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
         allProducts.push({
           channelProductId: sku,
           sku,
-          title: sku, // 不调用详情接口，使用SKU作为标题
+          title: '', // 不调用详情接口，标题为空
           price: price?.price ?? null, // 原价，可能为null
           stock: inventory?.sellerInventoryInfo?.sellerAvailableInventory || 0,
           currency: price?.currency || 'USD',

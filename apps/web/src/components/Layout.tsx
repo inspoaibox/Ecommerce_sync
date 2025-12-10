@@ -6,12 +6,12 @@ import {
   DashboardOutlined,
   ApiOutlined,
   ShopOutlined,
-  FileTextOutlined,
   SearchOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
   CloudSyncOutlined,
   SyncOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
 
@@ -63,9 +63,9 @@ export default function Layout() {
         })),
         { key: '/shops/auto-sync', icon: <SyncOutlined />, label: '自动同步' },
         { key: '/shops/feed-status', icon: <CloudSyncOutlined />, label: 'Feed状态' },
+        { key: '/shops/operation-log', icon: <HistoryOutlined />, label: '操作日志' },
       ],
     },
-    { key: '/sync-logs', icon: <FileTextOutlined />, label: '同步日志' },
   ];
 
   // 获取当前选中的菜单key
@@ -82,6 +82,10 @@ export default function Layout() {
     // 自动同步页面
     if (path === '/shops/auto-sync') {
       return ['/shops/auto-sync'];
+    }
+    // 操作日志页面
+    if (path === '/shops/operation-log') {
+      return ['/shops/operation-log'];
     }
     // 店铺列表页面
     if (path === '/shops/list') {

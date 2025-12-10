@@ -116,6 +116,7 @@ model Shop {
   feedRecords    FeedRecord[]
   autoSyncConfig AutoSyncConfig?
   autoSyncTasks  AutoSyncTask[]
+  operationLogs  OperationLog[]
 
   @@map("shops")
 }
@@ -250,15 +251,17 @@ enum FeedSyncType {
 
 // 自动同步配置表
 model AutoSyncConfig {
-  id           String    @id @default(uuid())
-  shopId       String    @unique @map("shop_id")
-  enabled      Boolean   @default(false)
-  intervalDays Int       @default(1) @map("interval_days") // 1/2/3/5/7
-  syncType     String    @default("both") @map("sync_type") // price/inventory/both
-  lastSyncAt   DateTime? @map("last_sync_at")
-  nextSyncAt   DateTime? @map("next_sync_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid())
+  shopId             String    @unique @map("shop_id")
+  enabled            Boolean   @default(false)
+  intervalDays       Int       @default(1) @map("interval_days") // 1/2/3/5/7
+  syncHour           Int       @default(8) @map("sync_hour") // 同步时间点（0-23小时）
+  syncType           String    @default("both") @map("sync_type") // price/inventory/both
+  useDiscountedPrice Boolean   @default(false) @map("use_discounted_price") // 优先使用优惠总价
+  lastSyncAt         DateTime? @map("last_sync_at")
+  nextSyncAt         DateTime? @map("next_sync_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
@@ -295,6 +298,27 @@ model AutoSyncTask {
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@map("auto_sync_tasks")
+}
+
+// 操作日志表
+model OperationLog {
+  id          String   @id @default(uuid())
+  shopId      String?  @map("shop_id")
+  type        String   @db.VarChar(50) // import_products, import_platform_sku, sync_price, sync_inventory, auto_sync
+  status      String   @default("running") @db.VarChar(20) // running, completed, failed, cancelled
+  total       Int      @default(0)
+  processed   Int      @default(0)
+  success     Int      @default(0)
+  failed      Int      @default(0)
+  message     String?  @db.Text
+  detail      Json?    // 详细信息
+  startedAt   DateTime @default(now()) @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  shop Shop? @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@map("operation_logs")
 }
 
 // Feed同步记录表 - 跟踪沃尔玛Feed状态

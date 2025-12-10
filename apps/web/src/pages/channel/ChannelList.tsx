@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Button, Space, Modal, Form, Input, Select, message, Popconfirm, Tag } from 'antd';
-import { PlusOutlined, ApiOutlined, BugOutlined } from '@ant-design/icons';
+import { PlusOutlined, ApiOutlined, BugOutlined, SyncOutlined } from '@ant-design/icons';
 import { channelApi } from '@/services/api';
 
 // 预设渠道类型配置
@@ -9,7 +9,7 @@ const CHANNEL_PRESETS: Record<string, {
   name: string;
   code: string;
   apiBaseUrl: string;
-  fields: { key: string; label: string; required?: boolean; placeholder?: string }[];
+  fields: { key: string; label: string; required?: boolean; placeholder?: string; type?: string; options?: { value: string; label: string }[] }[];
 }> = {
   gigacloud: {
     name: '大健云仓',
@@ -27,6 +27,11 @@ const CHANNEL_PRESETS: Record<string, {
     fields: [
       { key: 'token', label: 'Token', required: true, placeholder: '请输入Token' },
       { key: 'key', label: 'Key', required: true, placeholder: '请输入Key（用于DES加密）' },
+      { key: 'warehouseCode', label: '默认区域', required: false, placeholder: '如：SZ0001（美国）', type: 'text' },
+      { key: 'priceType', label: '价格类型', required: false, placeholder: 'shipping(包邮) 或 pickup(自提)', type: 'select', options: [
+        { value: 'shipping', label: '包邮 (Standard Shipping)' },
+        { value: 'pickup', label: '自提 (Self-Pick up)' },
+      ]},
     ],
   },
 };
@@ -39,8 +44,41 @@ export default function ChannelList() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string>('');
   const [form] = Form.useForm();
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [fetchingWarehouses, setFetchingWarehouses] = useState(false);
 
   useEffect(() => { loadData(); }, []);
+
+  // 加载区域列表
+  const loadWarehouses = async (channelId: string) => {
+    try {
+      const res: any = await channelApi.getWarehouses(channelId);
+      if (res.success && res.data) {
+        setWarehouses(res.data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // 从API获取最新区域
+  const handleFetchWarehouses = async () => {
+    if (!editingId) return;
+    setFetchingWarehouses(true);
+    try {
+      const res: any = await channelApi.fetchWarehouses(editingId);
+      if (res.success) {
+        message.success(res.message || '获取区域成功');
+        await loadWarehouses(editingId);
+      } else {
+        message.error(res.message || '获取区域失败');
+      }
+    } catch (e: any) {
+      message.error(e.message || '获取区域失败');
+    } finally {
+      setFetchingWarehouses(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -103,9 +141,10 @@ export default function ChannelList() {
     loadData();
   };
 
-  const handleEdit = (record: any) => {
+  const handleEdit = async (record: any) => {
     setEditingId(record.id);
     setSelectedType(record.type);
+    setWarehouses([]);
     
     const formValues: any = {
       name: record.name,
@@ -126,6 +165,11 @@ export default function ChannelList() {
     
     form.setFieldsValue(formValues);
     setModalOpen(true);
+
+    // 如果是赛盈，加载区域列表
+    if (record.type === 'saleyee') {
+      await loadWarehouses(record.id);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -219,13 +263,52 @@ export default function ChannelList() {
             <Form.Item 
               key={field.key} 
               name={field.key} 
-              label={field.label}
+              label={
+                field.key === 'warehouseCode' ? (
+                  <Space>
+                    <span>{field.label}</span>
+                    {editingId && (
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<SyncOutlined />}
+                        loading={fetchingWarehouses}
+                        onClick={handleFetchWarehouses}
+                        style={{ padding: 0, height: 'auto' }}
+                      >
+                        获取最新区域
+                      </Button>
+                    )}
+                  </Space>
+                ) : field.label
+              }
               rules={field.required ? [{ required: true, message: `请输入${field.label}` }] : []}
             >
-              <Input.Password 
-                placeholder={field.placeholder} 
-                visibilityToggle
-              />
+              {field.key === 'warehouseCode' ? (
+                <Select
+                  placeholder={field.placeholder}
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  options={warehouses.length > 0
+                    ? warehouses.map(w => ({
+                        value: w.warehouseCode,
+                        label: `${w.warehouseName} (${w.warehouseCode})`
+                      }))
+                    : [
+                        { value: 'SZ0001', label: 'US 美国 (SZ0001)' },
+                        { value: 'SZ0002', label: 'UK 英国 (SZ0002)' },
+                        { value: 'SZ0003', label: 'DE 德国 (SZ0003)' },
+                      ]
+                  }
+                />
+              ) : (field as any).type === 'select' ? (
+                <Select placeholder={field.placeholder} options={(field as any).options} allowClear />
+              ) : (field as any).type === 'text' ? (
+                <Input placeholder={field.placeholder} />
+              ) : (
+                <Input.Password placeholder={field.placeholder} visibilityToggle />
+              )}
             </Form.Item>
           ))}
 

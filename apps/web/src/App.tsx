@@ -8,7 +8,7 @@ import ShopProducts from './pages/shop/ShopProducts';
 import ShopSyncTasks from './pages/shop/ShopSyncTasks';
 import FeedStatus from './pages/shop/FeedStatus';
 import AutoSync from './pages/shop/AutoSync';
-import SyncLogList from './pages/sync-log/SyncLogList';
+import OperationLog from './pages/shop/OperationLog';
 import ProductQuery from './pages/product/ProductQuery';
 import ProductList from './pages/product/ProductList';
 
@@ -26,9 +26,9 @@ function App() {
           <Route path="shops/list" element={<ShopList />} />
           <Route path="shops/sync-tasks" element={<ShopSyncTasks />} />
           <Route path="shops/feed-status" element={<FeedStatus />} />
+          <Route path="shops/operation-log" element={<OperationLog />} />
           <Route path="shops/auto-sync" element={<AutoSync />} />
           <Route path="shops/:shopId/products" element={<ShopProducts />} />
-          <Route path="sync-logs" element={<SyncLogList />} />
         </Route>
       </Routes>
     </BrowserRouter>

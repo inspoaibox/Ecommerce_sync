@@ -108,6 +108,8 @@ export const productApi = {
     api.post(`/products/import-platform-sku/${shopId}`, { mappings }),
   importProducts: (shopId: string, data: { channelId: string; products: { sku: string; platformSku?: string }[] }) =>
     api.post(`/products/import-products/${shopId}`, data),
+  fetchLatestFromChannel: (shopId: string, data: { productIds?: string[]; fetchType: string }) =>
+    api.post(`/products/fetch-latest/${shopId}`, data),
 };
 
 // 同步日志
@@ -122,6 +124,13 @@ export const dashboardApi = {
   overview: () => api.get('/dashboard/overview'),
   syncStats: () => api.get('/dashboard/sync-stats'),
   recentLogs: (limit?: number) => api.get('/dashboard/recent-logs', { params: { limit } }),
+};
+
+// 操作日志
+export const operationLogApi = {
+  list: (params?: any) => api.get('/operation-logs', { params }),
+  get: (id: string) => api.get(`/operation-logs/${id}`),
+  delete: (id: string) => api.delete(`/operation-logs/${id}`),
 };
 
 // 自动同步

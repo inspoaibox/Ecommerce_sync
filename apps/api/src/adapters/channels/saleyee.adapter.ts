@@ -6,6 +6,8 @@ interface SaleyeeConfig {
   token: string;
   key: string; // DES加密密钥
   baseUrl?: string; // 默认生产环境
+  warehouseCode?: string; // 默认区域代码，如 SZ0001
+  priceType?: 'shipping' | 'pickup'; // 价格类型：包邮或自提
 }
 
 interface RequestBase {
@@ -235,9 +237,9 @@ export class SaleyeeAdapter extends BaseChannelAdapter {
   ): Promise<ChannelProduct[]> {
     if (skus.length === 0) return [];
 
-    // 默认值：US区域(SZ0001)，包邮价格(Standard Shipping)
-    const warehouseCode = options?.warehouseCode || 'SZ0001';
-    const priceType = options?.priceType || 'shipping';
+    // 优先使用传入参数，其次使用渠道配置的默认值，最后使用硬编码默认值
+    const warehouseCode = options?.warehouseCode || this.saleyeeConfig.warehouseCode || 'SZ0001';
+    const priceType = options?.priceType || this.saleyeeConfig.priceType || 'shipping';
 
     // API限制每次最多30个SKU
     const chunks = this.chunkArray(skus, 30);
@@ -317,7 +319,7 @@ export class SaleyeeAdapter extends BaseChannelAdapter {
         allProducts.push({
           channelProductId: sku,
           sku,
-          title: detail?.CnName || detail?.EnName || sku,
+          title: detail?.CnName || detail?.EnName || '',
           price: selectedPrice?.OriginalPrice ?? null, // 原价
           stock: selectedInventory?.Qty || 0,
           currency: selectedPrice?.CurrencyCode || 'USD',
