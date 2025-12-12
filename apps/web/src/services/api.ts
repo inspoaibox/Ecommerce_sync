@@ -196,6 +196,9 @@ export const platformCategoryApi = {
   // 同步类目（支持指定国家）
   syncCategories: (platformId: string, country?: string, shopId?: string) => 
     api.post(`/platform-categories/sync/${platformId}`, null, { params: { country, shopId } }),
+  // 清空类目（指定国家）
+  clearCategories: (platformId: string, country: string) =>
+    api.delete(`/platform-categories/clear/${platformId}`, { params: { country } }),
   // 获取类目列表
   getCategories: (params?: any) => api.get('/platform-categories', { params }),
   // 获取类目树（支持指定国家）

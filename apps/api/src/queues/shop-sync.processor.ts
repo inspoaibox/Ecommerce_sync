@@ -46,10 +46,10 @@ export class ShopSyncProcessor extends WorkerHost {
 
       this.logger.log(`Starting product sync for shop: ${shop.name}, resumeFrom: ${resumeFrom}`);
 
-      // 创建适配器
+      // 创建适配器（传递 region 以支持多区域）
       const adapter = PlatformAdapterFactory.create(
         platformCode,
-        shop.apiCredentials as Record<string, any>,
+        { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
       ) as any;
 
       if (typeof adapter.getItemsBatched !== 'function') {

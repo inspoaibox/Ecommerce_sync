@@ -26,9 +26,10 @@ export class PushProcessor extends WorkerHost {
       where: { id: { in: productIds } },
     });
 
+    // 传递 region 以支持多区域
     const adapter = PlatformAdapterFactory.create(
       rule.shop.platform.code,
-      rule.shop.apiCredentials as Record<string, any>,
+      { ...(rule.shop.apiCredentials as Record<string, any>), region: rule.shop.region },
     );
 
     let successCount = 0;

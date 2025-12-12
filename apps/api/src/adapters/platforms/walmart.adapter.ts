@@ -6,16 +6,25 @@ import {
 } from './base.adapter';
 import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
+import { WalmartRegionConfig, getWalmartRegionConfig } from './walmart.config';
 
 export class WalmartAdapter extends BasePlatformAdapter {
   private client: AxiosInstance;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
+  private regionConfig: WalmartRegionConfig;
 
   constructor(credentials: Record<string, any>) {
     super(credentials);
-    const baseURL =
-      credentials.apiBaseUrl || 'https://marketplace.walmartapis.com';
+    
+    // 获取区域配置（从 credentials.region 或默认 US）
+    this.regionConfig = getWalmartRegionConfig(credentials.region);
+    
+    // 优先使用 credentials 中指定的 apiBaseUrl，否则使用区域配置
+    const baseURL = credentials.apiBaseUrl || this.regionConfig.apiBaseUrl;
+    
+    console.log(`[WalmartAdapter] Initialized for region: ${this.regionConfig.region}, baseURL: ${baseURL}`);
+    
     this.client = axios.create({
       baseURL,
       timeout: 60000, // 60秒超时
@@ -26,6 +35,13 @@ export class WalmartAdapter extends BasePlatformAdapter {
       this.accessToken = credentials.accessToken;
       this.tokenExpiry = Date.now() + 14 * 60 * 1000; // 假设14分钟有效
     }
+  }
+  
+  /**
+   * 获取当前区域配置
+   */
+  getRegionConfig(): WalmartRegionConfig {
+    return this.regionConfig;
   }
 
   // 生成关联ID
@@ -64,6 +80,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
           Authorization: `Basic ${authString}`,
           'Content-Type': 'application/x-www-form-urlencoded',
           Accept: 'application/json',
+          'WM_MARKET': this.regionConfig.marketCode,  // 区分市场：us, ca, mx, cl
           'WM_SVC.NAME': 'Walmart Marketplace',
           'WM_QOS.CORRELATION_ID': this.generateCorrelationId(),
         },
@@ -90,6 +107,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
     const token = await this.getAccessToken();
     return {
       'WM_SEC.ACCESS_TOKEN': token,
+      'WM_MARKET': this.regionConfig.marketCode,  // 区分市场：us, ca, mx, cl
       'WM_SVC.NAME': 'Walmart Marketplace',
       'WM_QOS.CORRELATION_ID': this.generateCorrelationId(),
       'Content-Type': 'application/json',
@@ -139,7 +157,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
               productId: product.sku,
             },
             price: {
-              currency: product.currency || 'USD',
+              currency: product.currency || this.regionConfig.currency,
               amount: product.price,
             },
           },
@@ -219,7 +237,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
         pricing: [
           {
             currentPrice: {
-              currency: 'USD',
+              currency: this.regionConfig.currency,
               amount: price,
             },
           },
@@ -243,12 +261,12 @@ export class WalmartAdapter extends BasePlatformAdapter {
     try {
       const headers = await this.getHeaders();
 
-      // 构建Feed数据
+      // 构建Feed数据（使用区域配置）
       const feedData = {
         MPItemFeedHeader: {
-          businessUnit: 'WALMART_US',
+          businessUnit: this.regionConfig.businessUnit,
           version: '2.0.20240126-12_25_52-api',
-          locale: 'en',
+          locale: this.regionConfig.locale,
         },
         MPItem: items.map(item => ({
           'Promo&Discount': {
@@ -568,7 +586,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
       title: item.productName || '',
       price: item.price?.amount || 0,
       stock: item.inventory?.quantity || 0,
-      currency: item.price?.currency || 'USD',
+      currency: item.price?.currency || this.regionConfig.currency,
       extraFields: {
         wpid: item.wpid,
         upc: item.upc,
@@ -577,6 +595,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
         lifecycleStatus: item.lifecycleStatus,
         publishedStatus: item.publishedStatus,
         unpublishedReasons: item.unpublishedReasons,
+        region: this.regionConfig.region,  // 添加区域标识
       },
     };
   }
@@ -1097,13 +1116,13 @@ export class WalmartAdapter extends BasePlatformAdapter {
     try {
       const headers = await this.getHeaders();
 
-      // 构建 MP_ITEM Feed 数据 - V5.0 格式
+      // 构建 MP_ITEM Feed 数据 - V5.0 格式（使用区域配置）
       // 参考 woo-walmart-sync 插件的实现
       const feedData = {
         MPItemFeedHeader: {
-          businessUnit: 'WALMART_US',  // V5.0 必需字段
-          locale: 'en',
-          version: '5.0.20241118-04_39_24-api',  // V5.0 完整版本号
+          businessUnit: this.regionConfig.businessUnit,  // V5.0 必需字段，根据区域配置
+          locale: this.regionConfig.locale,
+          version: this.regionConfig.specVersion,  // V5.0 完整版本号
         },
         MPItem: [item],  // 直接使用传入的数据，所有字段由类目属性映射配置决定
       };
@@ -1149,7 +1168,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
       const mpItem: any = { sku };
       if (updates.title) mpItem.productName = updates.title;
-      if (updates.price) mpItem.price = { currency: 'USD', amount: updates.price };
+      if (updates.price) mpItem.price = { currency: this.regionConfig.currency, amount: updates.price };
       if (updates.description) mpItem.ShortDescription = updates.description;
       if (updates.mainImageUrl) mpItem.mainImageUrl = updates.mainImageUrl;
       if (updates.attributes) Object.assign(mpItem, updates.attributes);

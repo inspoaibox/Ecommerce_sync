@@ -21,6 +21,19 @@ export class PlatformCategoryController {
   }
 
   /**
+   * 清空平台类目
+   * @param platformId 平台ID
+   * @param country 国家代码（必填）
+   */
+  @Delete('clear/:platformId')
+  async clearCategories(
+    @Param('platformId') platformId: string,
+    @Query('country') country: string,
+  ) {
+    return this.categoryService.clearCategories(platformId, country);
+  }
+
+  /**
    * 获取类目列表（分页）
    */
   @Get()

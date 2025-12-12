@@ -345,8 +345,8 @@ export class ListingService {
       console.log(`[submitListing] Platform: ${shop.platform?.code}, Products: ${products.length}`);
       
       if (shop.platform?.code === 'walmart') {
-        // Walmart 平台
-        const adapter = PlatformAdapterFactory.create('walmart', shop.apiCredentials as any) as WalmartAdapter;
+        // Walmart 平台（传递 region 以支持多区域）
+        const adapter = PlatformAdapterFactory.create('walmart', { ...(shop.apiCredentials as any), region: shop.region }) as WalmartAdapter;
         
         // 记录所有提交的数据
         const submittedItems: any[] = [];
@@ -715,10 +715,10 @@ export class ListingService {
       throw new BadRequestException('只支持 Walmart 平台的 Feed 状态刷新');
     }
 
-    // 创建 Walmart 适配器
+    // 创建 Walmart 适配器（传递 region 以支持多区域）
     const adapter = PlatformAdapterFactory.create(
       'walmart',
-      feedRecord.shop.apiCredentials as any,
+      { ...(feedRecord.shop.apiCredentials as any), region: feedRecord.shop.region },
     ) as WalmartAdapter;
 
     try {

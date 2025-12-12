@@ -140,8 +140,15 @@ export default function ShopList() {
     if (preset && !editingId) {
       form.setFieldsValue({
         apiBaseUrl: preset.apiBaseUrl,
+        region: undefined, // 重置区域选择
       });
     }
+  };
+
+  // 区域变化时的处理（Walmart 所有市场使用同一 API 地址，通过 WM_MARKET Header 区分）
+  const handleRegionChange = (_region: string) => {
+    // Walmart 所有市场使用统一的 API 地址：https://marketplace.walmartapis.com
+    // 区分市场通过请求头 WM_MARKET 实现，无需修改 API 地址
   };
 
   const handleSubmit = async () => {
@@ -325,7 +332,8 @@ export default function ShopList() {
             <Form.Item name="region" label="区域" rules={[{ required: true, message: '请选择区域' }]}>
               <Select 
                 placeholder="请选择区域"
-                options={currentPreset.regions} 
+                options={currentPreset.regions}
+                onChange={handleRegionChange}
               />
             </Form.Item>
           )}

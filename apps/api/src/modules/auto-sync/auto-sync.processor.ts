@@ -323,9 +323,10 @@ export class AutoSyncProcessor extends WorkerHost {
       return;
     }
 
+    // 传递 region 以支持多区域
     const adapter = PlatformAdapterFactory.create(
       platformCode,
-      task.shop.apiCredentials as any,
+      { ...(task.shop.apiCredentials as any), region: task.shop.region },
     ) as any;
 
     const syncType = task.syncType as 'price' | 'inventory' | 'both';

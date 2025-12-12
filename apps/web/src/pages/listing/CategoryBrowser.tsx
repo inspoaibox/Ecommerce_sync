@@ -244,6 +244,25 @@ export default function CategoryBrowser() {
     }
   };
 
+  const [clearing, setClearing] = useState(false);
+  
+  const handleClear = async () => {
+    if (!selectedPlatform || !selectedCountry) return;
+    setClearing(true);
+    try {
+      const res: any = await platformCategoryApi.clearCategories(selectedPlatform, selectedCountry);
+      message.success(`已清空 ${res.country} 区域的 ${res.deleted} 个类目`);
+      loadAvailableCountries();
+      loadCategoryTree();
+      setSelectedCategory(null);
+      setMappingRules([]);
+    } catch (e: any) {
+      message.error(e.message || '清空失败');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const handleSearch = async () => {
     if (!selectedPlatform || !searchKeyword.trim()) {
       message.warning('请输入搜索关键词');
@@ -1012,6 +1031,18 @@ export default function CategoryBrowser() {
             <Button icon={<SyncOutlined />} onClick={handleSync} loading={syncing} size="small">
               同步
             </Button>
+            <Popconfirm
+              title={`确定清空 ${selectedCountry} 区域的所有类目吗？`}
+              description="此操作不可恢复，清空后需要重新同步"
+              onConfirm={handleClear}
+              okText="确定清空"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+            >
+              <Button icon={<DeleteOutlined />} loading={clearing} size="small" danger>
+                清空
+              </Button>
+            </Popconfirm>
           </Space>
         }
       >

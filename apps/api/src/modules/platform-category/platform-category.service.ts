@@ -70,9 +70,11 @@ export class PlatformCategoryService {
     // 确定国家代码
     const targetCountry = country || shop.region || 'US';
 
+    console.log(`[syncCategories] country param: ${country}, shop.region: ${shop.region}, targetCountry: ${targetCountry}, shop.name: ${shop.name}`);
+
     const adapter = PlatformAdapterFactory.create(
       platform.code,
-      shop.apiCredentials as Record<string, any>,
+      { ...(shop.apiCredentials as Record<string, any>), region: targetCountry },
     );
     if (!('getCategories' in adapter)) {
       throw new BadRequestException('该平台不支持类目同步');
@@ -131,6 +133,39 @@ export class PlatformCategoryService {
     }
 
     return { total: categories.length, created, updated, country: targetCountry };
+  }
+
+  /**
+   * 清空平台类目
+   * @param platformId 平台ID
+   * @param country 国家代码（必填）
+   */
+  async clearCategories(platformId: string, country: string): Promise<{ deleted: number; country: string }> {
+    if (!country) {
+      throw new BadRequestException('国家代码不能为空');
+    }
+
+    // 先删除该平台该国家的所有属性
+    const categories = await this.prisma.platformCategory.findMany({
+      where: { platformId, country },
+      select: { id: true },
+    });
+    const categoryIds = categories.map(c => c.id);
+
+    if (categoryIds.length > 0) {
+      await this.prisma.platformAttribute.deleteMany({
+        where: { categoryId: { in: categoryIds } },
+      });
+    }
+
+    // 删除类目
+    const result = await this.prisma.platformCategory.deleteMany({
+      where: { platformId, country },
+    });
+
+    console.log(`[clearCategories] Deleted ${result.count} categories for platform ${platformId}, country ${country}`);
+
+    return { deleted: result.count, country };
   }
 
   /**
@@ -231,7 +266,7 @@ export class PlatformCategoryService {
 
     const adapter = PlatformAdapterFactory.create(
       platform.code,
-      shop.apiCredentials as Record<string, any>,
+      { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
     );
     if (!('getCategoryAttributesRaw' in adapter)) {
       throw new BadRequestException('该平台不支持获取原始属性数据');
@@ -301,7 +336,7 @@ export class PlatformCategoryService {
 
     const adapter = PlatformAdapterFactory.create(
       platform.code,
-      shop.apiCredentials as Record<string, any>,
+      { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
     );
     if (!('getCategoryAttributes' in adapter)) {
       return [];

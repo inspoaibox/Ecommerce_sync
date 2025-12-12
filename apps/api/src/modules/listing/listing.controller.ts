@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/
 import { ListingService } from './listing.service';
 import { ListingLogService } from './listing-log.service';
 import { ListingFeedService } from './listing-feed.service';
+import { ListingFeedSchedulerService } from './listing-feed-scheduler.service';
 import {
   QueryFromChannelDto,
   ListingQueryDto,
@@ -17,6 +18,7 @@ export class ListingController {
     private readonly listingService: ListingService,
     private readonly listingLogService: ListingLogService,
     private readonly listingFeedService: ListingFeedService,
+    private readonly listingFeedSchedulerService: ListingFeedSchedulerService,
   ) {}
 
   /**
@@ -186,5 +188,13 @@ export class ListingController {
   @Post('feeds/:id/refresh')
   async refreshFeedStatus(@Param('id') id: string) {
     return this.listingService.refreshFeedStatus(id);
+  }
+
+  /**
+   * 手动触发 Feed 状态检查（检查所有待处理的 Feed）
+   */
+  @Post('feeds/check-pending')
+  async checkPendingFeeds() {
+    return this.listingFeedSchedulerService.manualCheck();
   }
 }

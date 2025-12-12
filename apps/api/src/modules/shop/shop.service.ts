@@ -100,7 +100,7 @@ export class ShopService {
       const platformCode = (shop as any).platform?.code || shop.platformId;
       const adapter = PlatformAdapterFactory.create(
         platformCode,
-        shop.apiCredentials as Record<string, any>,
+        { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
       );
       const result = await adapter.testConnection();
       return { success: result, message: result ? '连接成功' : '连接失败' };
@@ -270,7 +270,7 @@ export class ShopService {
 
     const adapter = PlatformAdapterFactory.create(
       platformCode,
-      shop.apiCredentials as Record<string, any>,
+      { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
     ) as any;
 
     if (typeof adapter.getItemsBySkus !== 'function') {
@@ -350,7 +350,7 @@ export class ShopService {
 
     const adapter = PlatformAdapterFactory.create(
       platformCode,
-      shop.apiCredentials as Record<string, any>,
+      { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
     ) as any;
 
     if ((syncType === 'price' || syncType === 'both') && typeof adapter.batchUpdatePrices !== 'function') {
@@ -558,7 +558,7 @@ export class ShopService {
 
     const adapter = PlatformAdapterFactory.create(
       platformCode,
-      shop.apiCredentials as Record<string, any>,
+      { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
     ) as any;
 
     if (typeof adapter.getFeedStatus !== 'function') {
@@ -659,7 +659,7 @@ export class ShopService {
 
     const adapter = PlatformAdapterFactory.create(
       platformCode,
-      shop.apiCredentials as Record<string, any>,
+      { ...(shop.apiCredentials as Record<string, any>), region: shop.region },
     ) as any;
 
     if (typeof adapter.getFeedStatusAll !== 'function') {
