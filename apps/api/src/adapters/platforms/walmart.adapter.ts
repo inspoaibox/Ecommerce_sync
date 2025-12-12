@@ -75,6 +75,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
         params.append('refresh_token', refreshToken);
       }
 
+      console.log(`[Walmart] Requesting token for market: ${this.regionConfig.marketCode}, region: ${this.regionConfig.region}`);
+      
       const response = await this.client.post('/v3/token', params.toString(), {
         headers: {
           Authorization: `Basic ${authString}`,
@@ -86,6 +88,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
         },
       });
 
+      console.log(`[Walmart] Token obtained successfully for market: ${this.regionConfig.marketCode}`);
       this.accessToken = response.data.access_token;
       // Token有效期通常是15分钟，提前1分钟刷新
       const expiresIn = response.data.expires_in || 900;
@@ -105,14 +108,48 @@ export class WalmartAdapter extends BasePlatformAdapter {
   // 获取请求头
   private async getHeaders(): Promise<Record<string, string>> {
     const token = await this.getAccessToken();
-    return {
+    
+    // WM_CONSUMER.CHANNEL.TYPE 优先级：
+    // 1. credentials.channelType（用户在店铺配置中指定的 Channel Type Code）
+    // 2. credentials.clientId（OAuth 2.0 模式使用 Client ID）
+    // 3. regionConfig.businessUnit（降级使用业务单元名称）
+    const channelType = this.credentials.channelType || this.credentials.clientId || this.regionConfig.businessUnit;
+    
+    console.log(`[Walmart] getHeaders - channelType: ${channelType}, region: ${this.regionConfig.region}, hasCustomChannelType: ${!!this.credentials.channelType}`);
+    
+    const headers: Record<string, string> = {
       'WM_SEC.ACCESS_TOKEN': token,
       'WM_MARKET': this.regionConfig.marketCode,  // 区分市场：us, ca, mx, cl
       'WM_SVC.NAME': 'Walmart Marketplace',
       'WM_QOS.CORRELATION_ID': this.generateCorrelationId(),
+      'WM_CONSUMER.CHANNEL.TYPE': channelType,  // 必需：优先使用专门的 Channel Type Code
       'Content-Type': 'application/json',
       Accept: 'application/json',
     };
+    
+    // 非美国市场需要额外的 headers
+    if (this.regionConfig.region !== 'US') {
+      headers['WM_TENANT_ID'] = `WALMART.${this.regionConfig.region}`;  // 如：WALMART.CA
+      headers['WM_LOCALE_ID'] = `${this.regionConfig.locale}_${this.regionConfig.region}`;  // 如：en_CA
+    }
+    
+    return headers;
+  }
+
+  /**
+   * 构建带市场路径前缀的 API 端点
+   * 美国市场: /v3/items/taxonomy -> /v3/items/taxonomy
+   * 加拿大市场: /v3/items/taxonomy -> /v3/ca/items/taxonomy
+   * 墨西哥市场: /v3/items/taxonomy -> /v3/mx/items/taxonomy
+   */
+  private buildEndpoint(endpoint: string): string {
+    const prefix = this.regionConfig.apiPathPrefix;
+    if (!prefix) {
+      return endpoint;
+    }
+    // 将 /v3/xxx 转换为 /v3/{prefix}/xxx
+    // 例如: /v3/items/taxonomy -> /v3/ca/items/taxonomy
+    return endpoint.replace('/v3/', `/v3${prefix}/`);
   }
 
   async testConnection(): Promise<boolean> {
@@ -164,9 +201,10 @@ export class WalmartAdapter extends BasePlatformAdapter {
         ],
       };
 
-      const response = await this.client.post('/v3/feeds', feedData, {
+      const endpoint = this.buildEndpoint('/v3/feeds');
+      const response = await this.client.post(endpoint, feedData, {
         headers,
-        params: { feedType: 'MP_ITEM' },
+        params: { feedType: this.regionConfig.feedType },
       });
 
       return {
@@ -217,7 +255,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
         },
       };
 
-      await this.client.put(`/v3/inventory`, inventoryData, {
+      const endpoint = this.buildEndpoint('/v3/inventory');
+      await this.client.put(endpoint, inventoryData, {
         headers,
         params: { sku },
       });
@@ -244,7 +283,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
         ],
       };
 
-      await this.client.put(`/v3/price`, priceData, {
+      const endpoint = this.buildEndpoint('/v3/price');
+      await this.client.put(endpoint, priceData, {
         headers,
         params: { sku },
       });
@@ -287,7 +327,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
         contentType: 'application/json',
       });
 
-      const response = await this.client.post('/v3/feeds', form, {
+      const endpoint = this.buildEndpoint('/v3/feeds');
+      const response = await this.client.post(endpoint, form, {
         headers: {
           ...headers,
           ...form.getHeaders(),
@@ -337,7 +378,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
         contentType: 'application/json',
       });
 
-      const response = await this.client.post('/v3/feeds', form, {
+      const endpoint = this.buildEndpoint('/v3/feeds');
+      const response = await this.client.post(endpoint, form, {
         headers: {
           ...headers,
           ...form.getHeaders(),
@@ -363,7 +405,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
     try {
       const headers = await this.getHeaders();
 
-      const response = await this.client.get(`/v3/feeds/${feedId}`, {
+      const endpoint = this.buildEndpoint(`/v3/feeds/${feedId}`);
+      const response = await this.client.get(endpoint, {
         headers,
         params: { includeDetails, offset, limit },
       });
@@ -453,7 +496,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
     try {
       const headers = await this.getHeaders();
 
-      const response = await this.client.get('/v3/items', {
+      const endpoint = this.buildEndpoint('/v3/items');
+      const response = await this.client.get(endpoint, {
         headers,
         params: { offset, limit },
       });
@@ -533,7 +577,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
   async getItem(sku: string): Promise<any | null> {
     try {
       const headers = await this.getHeaders();
-      const response = await this.client.get('/v3/items', {
+      const endpoint = this.buildEndpoint('/v3/items');
+      const response = await this.client.get(endpoint, {
         headers,
         params: { sku },
       });
@@ -604,10 +649,86 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
   /**
    * 获取 Walmart 类目列表
-   * 使用 /v3/items/taxonomy?version=5.0 端点获取完整的类目树
-   * 数据结构：Category -> Product Type Group (PTG) -> Product Type (PT)
+   * 美国市场: 使用 /v3/items/taxonomy?version=5.0 端点，三层结构（Category -> PTG -> PT）
+   * 加拿大/墨西哥/智利市场: 使用 /v3/items/taxonomy 端点（无版本参数），一级扁平结构
+   * 
+   * 重要：所有市场都使用同一个端点，通过 WM_MARKET header 区分
+   * 加拿大市场不需要 /ca/ 路径前缀（taxonomy API 特殊）
    */
   async getCategories(): Promise<Array<{
+    categoryId: string;
+    name: string;
+    categoryPath: string;
+    parentId: string | null;
+    level: number;
+    isLeaf: boolean;
+    productTypeGroupId?: string;
+    productTypeGroupName?: string;
+    productTypeId?: string;
+    productTypeName?: string;
+  }>> {
+    // 非美国市场使用不同的 API 调用方式
+    if (this.regionConfig.region !== 'US') {
+      return this.getInternationalCategories();
+    }
+
+    // 美国市场从 API 获取类目（带 version=5.0）
+    return this.getUSCategories();
+  }
+
+  /**
+   * 获取国际市场（CA/MX/CL）的类目列表
+   * 这些市场使用 /v3/items/taxonomy 端点（不带版本参数），返回扁平的一级结构
+   * 
+   * 重要发现（通过 API 测试确认）：
+   * - 端点: GET /v3/items/taxonomy（不带 /ca/ 前缀，不带 version 参数）
+   * - 通过 WM_MARKET: ca header 区分市场
+   * - 返回 79 个类目，ID 是下划线格式（如 alcoholic_beverages）
+   */
+  private async getInternationalCategories(): Promise<Array<{
+    categoryId: string;
+    name: string;
+    categoryPath: string;
+    parentId: string | null;
+    level: number;
+    isLeaf: boolean;
+  }>> {
+    try {
+      const headers = await this.getHeaders();
+
+      // 国际市场使用 /v3/items/taxonomy（不带版本参数，不带市场路径前缀）
+      // 通过 WM_MARKET header 区分市场
+      const endpoint = '/v3/items/taxonomy';
+      
+      console.log(`[Walmart] Fetching international categories from ${endpoint}, market: ${this.regionConfig.marketCode}, region: ${this.regionConfig.region}`);
+      
+      const response = await this.client.get(endpoint, { headers });
+      
+      // 解析响应：{ success: "SUCCESS", payload: [...] }
+      const categoriesData = response.data?.payload || [];
+      
+      console.log(`[Walmart] Got ${categoriesData.length} categories for ${this.regionConfig.region} market`);
+
+      return categoriesData.map((cat: any) => ({
+        categoryId: cat.categoryId || cat.id || '',
+        name: cat.categoryName || cat.name || '',
+        categoryPath: cat.categoryName || cat.name || '',
+        parentId: null,
+        level: 0,
+        isLeaf: true,  // 国际市场的类目都是叶子节点，可直接用于刊登
+      }));
+    } catch (error: any) {
+      const errData = error.response?.data;
+      console.error(`[Walmart] Get international categories failed:`, JSON.stringify(errData || error.message, null, 2));
+      // 返回空数组，让前端显示错误
+      return [];
+    }
+  }
+
+  /**
+   * 获取美国市场的类目列表（从 API）
+   */
+  private async getUSCategories(): Promise<Array<{
     categoryId: string;
     name: string;
     categoryPath: string;
@@ -622,12 +743,18 @@ export class WalmartAdapter extends BasePlatformAdapter {
     try {
       const headers = await this.getHeaders();
 
-      // 使用 5.0 版本的 taxonomy 端点
-      console.log('[Walmart] Fetching categories from /v3/items/taxonomy?version=5.0');
-      const response = await this.client.get('/v3/items/taxonomy', {
+      const endpoint = '/v3/items/taxonomy';
+      const version = '5.0';
+      
+      console.log(`[Walmart] Fetching categories from ${endpoint}?version=${version}, market: ${this.regionConfig.marketCode}, region: ${this.regionConfig.region}`);
+      const response = await this.client.get(endpoint, {
         headers,
-        params: { version: '5.0' },
+        params: { version },
       });
+      
+      // 调试：输出响应的前几个类目名称
+      const firstCategories = response.data?.payload?.slice(0, 3) || response.data?.itemTaxonomy?.slice(0, 3) || [];
+      console.log(`[Walmart] First categories:`, firstCategories.map((c: any) => c.category || c.name).join(', '));
 
       const categories: Array<{
         categoryId: string;
@@ -729,7 +856,9 @@ export class WalmartAdapter extends BasePlatformAdapter {
       console.log(`[Walmart] Total categories parsed: ${categories.length}`);
       return categories;
     } catch (error: any) {
-      console.error('[Walmart] Get categories failed:', error.response?.data || error.message);
+      const status = error.response?.status;
+      const errData = error.response?.data;
+      console.error(`[Walmart] Get categories failed (HTTP ${status}):`, JSON.stringify(errData || error.message, null, 2));
       // 如果 API 不可用，返回空数组
       return [];
     }
@@ -737,21 +866,24 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
   /**
    * 获取类目属性原始响应（用于调试）
-   * 返回 V5.0 Item Spec API 的原始 JSON Schema 响应
+   * 返回 Item Spec API 的原始 JSON Schema 响应
    */
   async getCategoryAttributesRaw(categoryId: string): Promise<any> {
     try {
       const headers = await this.getHeaders();
 
-      console.log(`[Walmart] Fetching raw V5.0 spec for productType: ${categoryId}`);
+      // 构建带市场前缀的端点
+      const endpoint = this.buildEndpoint('/v3/items/spec');
+      
+      console.log(`[Walmart] Fetching raw spec for productType: ${categoryId}, endpoint: ${endpoint}, region: ${this.regionConfig.region}`);
 
       const requestBody = {
-        feedType: 'MP_ITEM',
-        version: '5.0.20241118-04_39_24-api',
+        feedType: this.regionConfig.feedType,
+        version: this.regionConfig.specVersion,
         productTypes: [categoryId],
       };
 
-      const response = await this.client.post('/v3/items/spec', requestBody, {
+      const response = await this.client.post(endpoint, requestBody, {
         headers,
       });
 
@@ -759,6 +891,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
         requestBody,
         response: response.data,
         categoryId,
+        region: this.regionConfig.region,
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
@@ -768,6 +901,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
         error: errMsg,
         errorDetails: errData,
         categoryId,
+        region: this.regionConfig.region,
         timestamp: new Date().toISOString(),
       };
     }
@@ -775,7 +909,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
   /**
    * 获取类目属性
-   * 使用 V5.0 Item Spec API: POST /v3/items/spec
+   * 使用 Item Spec API: POST /v3/items/spec（美国）或 /v3/{market}/items/spec（其他市场）
    * 参考 woo-walmart-sync 插件的实现
    */
   async getCategoryAttributes(categoryId: string): Promise<Array<{
@@ -795,18 +929,21 @@ export class WalmartAdapter extends BasePlatformAdapter {
     try {
       const headers = await this.getHeaders();
 
-      console.log(`[Walmart] Fetching V5.0 spec for productType: ${categoryId}`);
+      // 构建带市场前缀的端点
+      const endpoint = this.buildEndpoint('/v3/items/spec');
 
-      // 使用 V5.0 Item Spec API（参考 woo-walmart-sync 插件）
+      console.log(`[Walmart] Fetching spec for productType: ${categoryId}, endpoint: ${endpoint}, region: ${this.regionConfig.region}`);
+
+      // 使用区域配置的 feedType 和 specVersion
       const requestBody = {
-        feedType: 'MP_ITEM',
-        version: '5.0.20241118-04_39_24-api',
+        feedType: this.regionConfig.feedType,
+        version: this.regionConfig.specVersion,
         productTypes: [categoryId], // Product Type 名称
       };
 
       console.log(`[Walmart] Request body:`, JSON.stringify(requestBody));
 
-      const response = await this.client.post('/v3/items/spec', requestBody, {
+      const response = await this.client.post(endpoint, requestBody, {
         headers,
       });
 
@@ -1134,12 +1271,13 @@ export class WalmartAdapter extends BasePlatformAdapter {
         contentType: 'application/json',
       });
 
-      const response = await this.client.post('/v3/feeds', form, {
+      const endpoint = this.buildEndpoint('/v3/feeds');
+      const response = await this.client.post(endpoint, form, {
         headers: {
           ...headers,
           ...form.getHeaders(),
         },
-        params: { feedType: 'MP_ITEM' },
+        params: { feedType: this.regionConfig.feedType },
       });
 
       return { 
@@ -1175,7 +1313,7 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
       const feedData = {
         MPItemFeedHeader: {
-          version: '4.2',
+          version: this.regionConfig.specVersion,
           requestId: this.generateCorrelationId(),
           requestBatchId: this.generateCorrelationId(),
         },
@@ -1189,12 +1327,13 @@ export class WalmartAdapter extends BasePlatformAdapter {
         contentType: 'application/json',
       });
 
-      const response = await this.client.post('/v3/feeds', form, {
+      const endpoint = this.buildEndpoint('/v3/feeds');
+      const response = await this.client.post(endpoint, form, {
         headers: {
           ...headers,
           ...form.getHeaders(),
         },
-        params: { feedType: 'MP_ITEM' },
+        params: { feedType: this.regionConfig.feedType },
       });
 
       return { feedId: response.data.feedId };

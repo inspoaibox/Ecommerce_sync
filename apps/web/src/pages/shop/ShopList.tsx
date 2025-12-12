@@ -25,6 +25,7 @@ const PLATFORM_PRESETS: Record<string, {
     fields: [
       { key: 'clientId', label: 'Client ID', required: true, placeholder: '请输入Walmart Client ID' },
       { key: 'clientSecret', label: 'Client Secret', required: true, placeholder: '请输入Walmart Client Secret', type: 'password' },
+      { key: 'channelType', label: 'Channel Type', required: false, placeholder: '从Seller Center获取的Consumer Channel Type（非美国市场必填）' },
       { key: 'accessToken', label: 'Access Token', required: false, placeholder: '首次授权后自动获取（可选）', type: 'password' },
       { key: 'refreshToken', label: 'Refresh Token', required: false, placeholder: '用于刷新Access Token（可选）', type: 'password' },
       { key: 'fulfillmentLagTime', label: '备货时间 (天)', required: false, placeholder: '收到订单后准备发货的天数，默认1天', type: 'number' },

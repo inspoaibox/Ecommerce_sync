@@ -23,6 +23,10 @@ export interface WalmartRegionConfig {
   currency: string;
   /** Item Spec 版本 */
   specVersion: string;
+  /** API 路径前缀（非美国市场需要，如 /ca/, /mx/） */
+  apiPathPrefix: string;
+  /** Feed 类型（美国用 MP_ITEM，其他市场用 MP_ITEM_INTL） */
+  feedType: string;
 }
 
 /**
@@ -43,6 +47,8 @@ export const WALMART_REGION_CONFIGS: Record<string, WalmartRegionConfig> = {
     locale: 'en',
     currency: 'USD',
     specVersion: '5.0.20241118-04_39_24-api',
+    apiPathPrefix: '',  // 美国市场不需要路径前缀
+    feedType: 'MP_ITEM',
   },
   // 加拿大市场
   CA: {
@@ -53,7 +59,9 @@ export const WALMART_REGION_CONFIGS: Record<string, WalmartRegionConfig> = {
     businessUnit: 'WALMART_CA',
     locale: 'en',
     currency: 'CAD',
-    specVersion: '5.0.20241118-04_39_24-api',
+    specVersion: '3.16',  // 加拿大使用 3.16 版本
+    apiPathPrefix: '/ca',  // 加拿大市场需要 /ca 路径前缀
+    feedType: 'MP_ITEM_INTL',  // 加拿大使用国际版 Feed
   },
   // 墨西哥市场
   MX: {
@@ -64,7 +72,9 @@ export const WALMART_REGION_CONFIGS: Record<string, WalmartRegionConfig> = {
     businessUnit: 'WALMART_MX',
     locale: 'es',
     currency: 'MXN',
-    specVersion: '5.0.20241118-04_39_24-api',
+    specVersion: '3.16',
+    apiPathPrefix: '/mx',  // 墨西哥市场需要 /mx 路径前缀
+    feedType: 'MP_ITEM_INTL',
   },
   // 智利市场
   CL: {
@@ -75,7 +85,9 @@ export const WALMART_REGION_CONFIGS: Record<string, WalmartRegionConfig> = {
     businessUnit: 'WALMART_CL',
     locale: 'es',
     currency: 'CLP',
-    specVersion: '5.0.20241118-04_39_24-api',
+    specVersion: '3.16',
+    apiPathPrefix: '/cl',  // 智利市场需要 /cl 路径前缀
+    feedType: 'MP_ITEM_INTL',
   },
 };
 
