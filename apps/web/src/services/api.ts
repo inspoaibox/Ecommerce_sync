@@ -177,6 +177,18 @@ export const listingApi = {
   // 刊登任务
   getTasks: (params?: any) => api.get('/listing/tasks', { params }),
   getTask: (taskId: string) => api.get(`/listing/tasks/${taskId}`),
+  // 刊登日志
+  getLogs: (params?: any) => api.get('/listing/logs', { params }),
+  getLog: (id: string) => api.get(`/listing/logs/${id}`),
+  deleteLog: (id: string) => api.delete(`/listing/logs/${id}`),
+  deleteLogs: (ids: string[]) => api.delete('/listing/logs', { data: { ids } }),
+  // 刊登 Feed
+  getFeeds: (params?: any) => api.get('/listing/feeds', { params }),
+  getFeed: (id: string) => api.get(`/listing/feeds/${id}`),
+  deleteFeed: (id: string) => api.delete(`/listing/feeds/${id}`),
+  deleteFeeds: (ids: string[]) => api.delete('/listing/feeds', { data: { ids } }),
+  // 刷新 Feed 状态（从 Walmart API 获取最新状态）
+  refreshFeedStatus: (id: string) => api.post(`/listing/feeds/${id}/refresh`),
 };
 
 // 平台类目
@@ -194,9 +206,12 @@ export const platformCategoryApi = {
     api.get(`/platform-categories/search/${platformId}`, { params: { keyword, country, limit } }),
   // 获取类目详情
   getCategory: (id: string) => api.get(`/platform-categories/${id}`),
-  // 获取类目属性（支持指定国家）
-  getCategoryAttributes: (platformId: string, categoryId: string, country?: string) =>
-    api.get(`/platform-categories/${platformId}/attributes/${categoryId}`, { params: { country } }),
+  // 获取类目属性（支持指定国家，forceRefresh=true 强制从平台重新获取）
+  getCategoryAttributes: (platformId: string, categoryId: string, country?: string, forceRefresh?: boolean) =>
+    api.get(`/platform-categories/${platformId}/attributes/${categoryId}`, { params: { country, forceRefresh } }),
+  // 获取类目属性原始响应（用于调试）
+  getCategoryAttributesRaw: (platformId: string, categoryId: string, country?: string) =>
+    api.get(`/platform-categories/${platformId}/attributes-raw/${categoryId}`, { params: { country } }),
   // 获取平台已同步的国家列表
   getCountries: (platformId: string) => api.get(`/platform-categories/countries/${platformId}`),
   // 获取类目属性映射配置
@@ -211,6 +226,59 @@ export const platformCategoryApi = {
   // 获取平台所有类目的映射配置列表
   getCategoryAttributeMappings: (platformId: string, country?: string) =>
     api.get(`/platform-categories/${platformId}/mappings`, { params: { country } }),
+  // 获取常用类目
+  getFrequentCategories: (platformId: string, country?: string, limit?: number) =>
+    api.get(`/platform-categories/${platformId}/frequent`, { params: { country, limit } }),
+  // 获取可用的映射配置列表（用于加载配置）
+  getAvailableMappings: (platformId: string, country?: string) =>
+    api.get(`/platform-categories/${platformId}/available-mappings`, { params: { country } }),
+  // 获取默认属性映射配置
+  getDefaultAttributeMapping: (platformId: string, country?: string) =>
+    api.get(`/platform-categories/${platformId}/default-mapping`, { params: { country } }),
+  // 保存默认属性映射配置
+  saveDefaultAttributeMapping: (platformId: string, mappingRules: any, country?: string) =>
+    api.post(`/platform-categories/${platformId}/default-mapping`, { mappingRules }, { params: { country } }),
+  // 删除默认属性映射配置
+  deleteDefaultAttributeMapping: (platformId: string, country?: string) =>
+    api.delete(`/platform-categories/${platformId}/default-mapping`, { params: { country } }),
+  // 应用默认配置到属性列表
+  applyDefaultMappingToAttributes: (platformId: string, attributes: any[], country?: string) =>
+    api.post(`/platform-categories/${platformId}/apply-default-mapping`, { attributes }, { params: { country } }),
+};
+
+// 商品池管理
+export const productPoolApi = {
+  // 获取统计信息
+  getStats: (channelId?: string) => api.get('/product-pool/stats', { params: { channelId } }),
+  // 获取列表
+  list: (params?: {
+    page?: number;
+    pageSize?: number;
+    channelId?: string;
+    keyword?: string;
+    sku?: string;
+    platformCategoryId?: string;
+  }) => api.get('/product-pool', { params }),
+  // 获取详情
+  get: (id: string) => api.get(`/product-pool/${id}`),
+  // 导入商品
+  import: (data: { channelId: string; products: any[]; duplicateAction?: 'skip' | 'update'; platformCategoryId?: string }) =>
+    api.post('/product-pool/import', data),
+  // 刊登到店铺
+  publish: (data: { productPoolIds: string[]; shopId: string; platformCategoryId?: string }) =>
+    api.post('/product-pool/publish', data),
+  // 更新商品
+  update: (id: string, data: any) => api.put(`/product-pool/${id}`, data),
+  // 删除商品
+  delete: (ids: string[]) => api.delete('/product-pool', { data: { ids } }),
+  // 获取刊登状态
+  getListingStatus: (id: string) => api.get(`/product-pool/${id}/listings`),
+  // 下载导入模板
+  downloadTemplate: () => api.get('/product-pool/template/download', { responseType: 'blob' }),
+  // 从 Excel 导入
+  importFromExcel: (formData: FormData) => api.post('/product-pool/import-excel', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 // UPC 池管理
@@ -241,3 +309,155 @@ export const upcApi = {
 };
 
 export default api;
+
+
+// AI 模型管理
+export const aiModelApi = {
+  // 获取渠道列表
+  list: () => api.get('/ai/models'),
+  // 获取所有模型（用于默认模型选择）
+  getAllModels: () => api.get('/ai/models/all-models'),
+  // 获取详情
+  get: (id: string) => api.get(`/ai/models/${id}`),
+  // 创建渠道
+  create: (data: {
+    name: string;
+    type: 'openai' | 'gemini' | 'openai_compatible';
+    apiKey: string;
+    baseUrl?: string;
+    modelList: { id: string; name: string; maxTokens?: number }[];
+    maxTokens?: number;
+    temperature?: number;
+  }) => api.post('/ai/models', data),
+  // 更新渠道
+  update: (id: string, data: any) => api.put(`/ai/models/${id}`, data),
+  // 删除渠道
+  delete: (id: string) => api.delete(`/ai/models/${id}`),
+  // 测试连接
+  test: (id: string) => api.post(`/ai/models/${id}/test`),
+  // 设置默认
+  setDefault: (id: string, defaultModel?: string) => api.post(`/ai/models/${id}/default`, { defaultModel }),
+  // 获取可用模型列表（从 API 动态获取）
+  fetchModels: (data: { type: 'openai' | 'gemini' | 'openai_compatible'; apiKey: string; baseUrl?: string }) =>
+    api.post('/ai/models/fetch-models', data),
+};
+
+// Prompt 模板管理
+export const promptTemplateApi = {
+  // 获取列表
+  list: (type?: string) => api.get('/ai/templates', { params: { type } }),
+  // 获取详情
+  get: (id: string) => api.get(`/ai/templates/${id}`),
+  // 创建
+  create: (data: {
+    name: string;
+    type: 'title' | 'description' | 'bullet_points' | 'keywords' | 'general';
+    content: string;
+    description?: string;
+    isDefault?: boolean;
+  }) => api.post('/ai/templates', data),
+  // 更新
+  update: (id: string, data: any) => api.put(`/ai/templates/${id}`, data),
+  // 删除
+  delete: (id: string) => api.delete(`/ai/templates/${id}`),
+  // 复制
+  duplicate: (id: string) => api.post(`/ai/templates/${id}/duplicate`),
+  // 设置默认
+  setDefault: (id: string) => api.post(`/ai/templates/${id}/default`),
+  // 预览
+  preview: (templateId: string, variables: Record<string, any>) =>
+    api.post('/ai/templates/preview', { templateId, variables }),
+};
+
+// 属性映射
+export const attributeMappingApi = {
+  // 预览映射结果
+  preview: (data: { mappingRules: any; channelAttributes: Record<string, any>; context?: any }) =>
+    api.post('/attribute-mapping/preview', data),
+  // 获取标准字段列表
+  getStandardFields: () => api.get('/attribute-mapping/standard-fields'),
+  // 获取自动生成规则列表
+  getAutoGenerateRules: () => api.get('/attribute-mapping/auto-generate-rules'),
+};
+
+// AI 优化
+export const aiOptimizeApi = {
+  // 优化单个商品
+  optimize: (data: {
+    productId: string;
+    productType: 'pool' | 'listing';
+    fields: ('title' | 'description' | 'bulletPoints' | 'keywords')[];
+    modelId?: string;
+    templateIds?: Record<string, string>;
+  }) => api.post('/ai/optimize', data),
+  // 批量优化
+  batchOptimize: (data: {
+    products: Array<{ id: string; type: 'pool' | 'listing' }>;
+    fields: ('title' | 'description' | 'bulletPoints' | 'keywords')[];
+    modelId?: string;
+    templateIds?: Record<string, string>;
+  }) => api.post('/ai/optimize/batch', data),
+  // 应用优化结果
+  apply: (logIds: string[]) => api.post('/ai/optimize/apply', { logIds }),
+  // 获取优化日志
+  getLogs: (params?: {
+    page?: number;
+    pageSize?: number;
+    productSku?: string;
+    field?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/ai/optimize/logs', { params }),
+  // 获取日志详情
+  getLogDetail: (id: string) => api.get(`/ai/optimize/logs/${id}`),
+};
+
+// 图片处理
+export const imageApi = {
+  // 分析单张图片
+  analyze: (url: string, maxSizeMB?: number) =>
+    api.get('/image/analyze', { params: { url, maxSizeMB } }),
+  // 批量分析
+  batchAnalyze: (urls: string[], maxSizeMB?: number) =>
+    api.post('/image/analyze/batch', { urls, maxSizeMB }),
+  // 处理单张图片
+  process: (data: { url: string; maxSizeMB?: number; forceSquare?: boolean; targetWidth?: number; quality?: number }) =>
+    api.post('/image/process', data),
+  // 批量处理
+  batchProcess: (data: { urls: string[]; maxSizeMB?: number; forceSquare?: boolean; targetWidth?: number; quality?: number }) =>
+    api.post('/image/process/batch', data),
+  // 处理商品图片
+  processProduct: (data: { mainImageUrl: string; imageUrls: string[]; maxSizeMB?: number; forceSquare?: boolean; targetWidth?: number; quality?: number }) =>
+    api.post('/image/process/product', data),
+
+  // 配置管理
+  listConfigs: () => api.get('/image/config'),
+  getDefaultConfig: () => api.get('/image/config/default'),
+  saveConfig: (data: { id?: string; name: string; maxSizeMB: number; forceSquare: boolean; targetWidth: number; quality: number; isDefault?: boolean }) =>
+    api.post('/image/config', data),
+  deleteConfig: (id: string) => api.delete(`/image/config/${id}`),
+
+  // 任务管理
+  listTasks: (params?: { page?: number; pageSize?: number; status?: string }) =>
+    api.get('/image/task', { params }),
+  getTask: (id: string) => api.get(`/image/task/${id}`),
+  createTask: (data: { name: string; scope: 'all' | 'category' | 'sku_list'; scopeValue?: string; configId?: string }) =>
+    api.post('/image/task', data),
+  startTask: (id: string) => api.post(`/image/task/${id}/start`),
+  pauseTask: (id: string) => api.post(`/image/task/${id}/pause`),
+  resumeTask: (id: string) => api.post(`/image/task/${id}/resume`),
+  cancelTask: (id: string) => api.post(`/image/task/${id}/cancel`),
+  retryFailed: (id: string) => api.post(`/image/task/${id}/retry`),
+  getTaskLogs: (id: string, params?: { page?: number; pageSize?: number; status?: string }) =>
+    api.get(`/image/task/${id}/logs`, { params }),
+};
+
+// 不可售平台
+export const unavailablePlatformApi = {
+  // 获取列表
+  list: (channelId?: string) => api.get('/unavailable-platforms', { params: { channelId } }),
+  // 批量保存
+  save: (platforms: { platformId: string; platformName: string }[], channelId?: string) =>
+    api.post('/unavailable-platforms/save', { platforms, channelId }),
+};

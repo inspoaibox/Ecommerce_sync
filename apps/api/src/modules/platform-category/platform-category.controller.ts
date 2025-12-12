@@ -101,8 +101,27 @@ export class PlatformCategoryController {
     @Param('platformId') platformId: string,
     @Param('categoryId') categoryId: string,
     @Query('country') country?: string,
+    @Query('forceRefresh') forceRefresh?: string,
   ) {
-    return this.categoryService.getCategoryAttributes(platformId, categoryId, country || 'US');
+    return this.categoryService.getCategoryAttributes(
+      platformId,
+      categoryId,
+      country || 'US',
+      forceRefresh === 'true',
+    );
+  }
+
+  /**
+   * 获取类目属性原始响应（用于调试）
+   * 返回平台 API 的原始 JSON Schema 响应
+   */
+  @Get(':platformId/attributes-raw/:categoryId')
+  async getCategoryAttributesRaw(
+    @Param('platformId') platformId: string,
+    @Param('categoryId') categoryId: string,
+    @Query('country') country?: string,
+  ) {
+    return this.categoryService.getCategoryAttributesRaw(platformId, categoryId, country || 'US');
   }
 
   // ==================== 类目属性映射配置 ====================
@@ -158,5 +177,88 @@ export class PlatformCategoryController {
     @Query('country') country?: string,
   ) {
     return this.categoryService.getCategoryAttributeMappings(platformId, country);
+  }
+
+  /**
+   * 获取常用类目（已配置映射的类目）
+   */
+  @Get(':platformId/frequent')
+  async getFrequentCategories(
+    @Param('platformId') platformId: string,
+    @Query('country') country?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    return this.categoryService.getFrequentCategories(platformId, country, limitNum);
+  }
+
+  /**
+   * 获取可用的映射配置列表（用于加载配置）
+   * 返回所有已保存映射配置的类目信息，供用户选择加载
+   */
+  @Get(':platformId/available-mappings')
+  async getAvailableMappings(
+    @Param('platformId') platformId: string,
+    @Query('country') country?: string,
+  ) {
+    return this.categoryService.getAvailableMappings(platformId, country);
+  }
+
+  // ==================== 默认属性映射配置 ====================
+
+  /**
+   * 获取默认属性映射配置
+   * 使用特殊的 categoryId = '__default__' 存储全局默认配置
+   */
+  @Get(':platformId/default-mapping')
+  async getDefaultAttributeMapping(
+    @Param('platformId') platformId: string,
+    @Query('country') country?: string,
+  ) {
+    return this.categoryService.getDefaultAttributeMapping(platformId, country || 'US');
+  }
+
+  /**
+   * 保存默认属性映射配置
+   */
+  @Post(':platformId/default-mapping')
+  async saveDefaultAttributeMapping(
+    @Param('platformId') platformId: string,
+    @Body() body: { mappingRules: any },
+    @Query('country') country?: string,
+  ) {
+    return this.categoryService.saveDefaultAttributeMapping({
+      platformId,
+      country: country || 'US',
+      mappingRules: body.mappingRules,
+    });
+  }
+
+  /**
+   * 删除默认属性映射配置
+   */
+  @Delete(':platformId/default-mapping')
+  async deleteDefaultAttributeMapping(
+    @Param('platformId') platformId: string,
+    @Query('country') country?: string,
+  ) {
+    return this.categoryService.deleteDefaultAttributeMapping(platformId, country || 'US');
+  }
+
+  /**
+   * 应用默认配置到属性列表
+   * 根据 attributeId 匹配默认配置中的规则
+   */
+  @Post(':platformId/apply-default-mapping')
+  async applyDefaultMappingToAttributes(
+    @Param('platformId') platformId: string,
+    @Body() body: { attributes: Array<{ attributeId: string; name: string; isRequired: boolean; dataType: string; enumValues?: string[] }> },
+    @Query('country') country?: string,
+  ) {
+    return this.categoryService.applyDefaultMappingToAttributes(
+      platformId,
+      country || 'US',
+      body.attributes,
+    );
   }
 }

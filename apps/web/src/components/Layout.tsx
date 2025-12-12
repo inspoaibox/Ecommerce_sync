@@ -14,6 +14,10 @@ import {
   HistoryOutlined,
   UploadOutlined,
   BarcodeOutlined,
+  QuestionCircleOutlined,
+  FileTextOutlined,
+  RobotOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import { shopApi } from '@/services/api';
 
@@ -59,9 +63,33 @@ export default function Layout() {
       label: '商品刊登',
       children: [
         { key: '/listing/query', icon: <SearchOutlined />, label: '商品查询' },
-        { key: '/listing/products', icon: <UnorderedListOutlined />, label: '刊登管理' },
+        { key: '/listing/product-pool', icon: <AppstoreOutlined />, label: '商品池' },
+        { key: '/listing/products', icon: <UnorderedListOutlined />, label: '商品管理' },
         { key: '/listing/categories', icon: <AppstoreOutlined />, label: '平台类目' },
         { key: '/listing/upc', icon: <BarcodeOutlined />, label: 'UPC 管理' },
+        { key: '/listing/logs', icon: <HistoryOutlined />, label: '刊登日志' },
+        { key: '/listing/feed-status', icon: <CloudSyncOutlined />, label: 'Feed状态' },
+        {
+          key: '/listing/ai',
+          icon: <RobotOutlined />,
+          label: 'AI 大模型',
+          children: [
+            { key: '/listing/ai/models', label: 'AI 模型' },
+            { key: '/listing/ai/templates', label: 'Prompt 模板' },
+            { key: '/listing/ai/optimize', label: 'AI 优化' },
+            { key: '/listing/ai/logs', label: '优化日志' },
+          ],
+        },
+        {
+          key: '/listing/image',
+          icon: <PictureOutlined />,
+          label: '图片处理',
+          children: [
+            { key: '/listing/image/config', label: '参数设置' },
+            { key: '/listing/image/batch', label: '批量处理' },
+            { key: '/listing/image/logs', label: '处理日志' },
+          ],
+        },
       ],
     },
     {
@@ -77,6 +105,14 @@ export default function Layout() {
         { key: '/shops/auto-sync', icon: <SyncOutlined />, label: '自动同步' },
         { key: '/shops/feed-status', icon: <CloudSyncOutlined />, label: 'Feed状态' },
         { key: '/shops/operation-log', icon: <HistoryOutlined />, label: '操作日志' },
+      ],
+    },
+    {
+      key: '/help',
+      icon: <QuestionCircleOutlined />,
+      label: '帮助中心',
+      children: [
+        { key: '/help/standard-fields', icon: <FileTextOutlined />, label: '标准字段说明' },
       ],
     },
   ];
@@ -118,6 +154,15 @@ export default function Layout() {
     }
     if (location.pathname.startsWith('/listing')) {
       keys.push('/listing');
+      if (location.pathname.startsWith('/listing/ai')) {
+        keys.push('/listing/ai');
+      }
+      if (location.pathname.startsWith('/listing/image')) {
+        keys.push('/listing/image');
+      }
+    }
+    if (location.pathname.startsWith('/help')) {
+      keys.push('/help');
     }
     return keys;
   };

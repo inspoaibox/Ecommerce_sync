@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/common/prisma/prisma.service';
 import { ChannelService } from '@/modules/channel/channel.service';
-import { UpcService } from '@/modules/upc/upc.service';
+import { AttributeResolverService } from '@/modules/attribute-mapping/attribute-resolver.service';
+import { ListingLogService } from './listing-log.service';
+import { ListingFeedService } from './listing-feed.service';
 import {
   QueryFromChannelDto,
   ListingQueryDto,
@@ -12,13 +14,16 @@ import {
   ValidateListingResultDto,
 } from './dto';
 import { ChannelProductDetail } from '@/adapters/channels/gigacloud.adapter';
+import { PlatformAdapterFactory, WalmartAdapter } from '@/adapters/platforms';
 
 @Injectable()
 export class ListingService {
   constructor(
     private prisma: PrismaService,
     private channelService: ChannelService,
-    private upcService: UpcService,
+    private attributeResolver: AttributeResolverService,
+    private listingLogService: ListingLogService,
+    private listingFeedService: ListingFeedService,
   ) {}
 
   /**
@@ -89,13 +94,12 @@ export class ListingService {
         // 根据映射配置生成平台属性
         let platformAttributes: Record<string, any> | null = null;
         if (categoryMapping?.mappingRules) {
-          platformAttributes = await this.generatePlatformAttributes(
+          const resolveResult = await this.attributeResolver.resolveAttributes(
             categoryMapping.mappingRules,
             product.channelAttributes || {},
-            product.channelRawData || {},
-            product.sku,
-            shopId,
+            { productSku: product.sku, shopId },
           );
+          platformAttributes = resolveResult.attributes;
         }
 
         if (existing) {
@@ -152,128 +156,6 @@ export class ListingService {
     }
 
     return result;
-  }
-
-  /**
-   * 根据映射规则生成商品的平台属性
-   */
-  private async generatePlatformAttributes(
-    mappingRules: any,
-    channelAttributes: Record<string, any> = {},
-    channelRawData: Record<string, any> = {},
-    productSku?: string,
-    shopId?: string,
-  ): Promise<Record<string, any>> {
-    const result: Record<string, any> = {};
-    const rules = mappingRules?.rules || [];
-
-    for (const rule of rules) {
-      const { attributeId, mappingType, value } = rule;
-      
-      switch (mappingType) {
-        case 'default_value':
-          if (value !== undefined && value !== '') {
-            result[attributeId] = value;
-          }
-          break;
-
-        case 'channel_data':
-          if (value) {
-            const extractedValue = this.extractValueFromPath(value, channelAttributes, channelRawData);
-            if (extractedValue !== undefined && extractedValue !== '') {
-              result[attributeId] = extractedValue;
-            }
-          }
-          break;
-
-        case 'enum_select':
-          if (value !== undefined && value !== '') {
-            result[attributeId] = value;
-          }
-          break;
-
-        case 'auto_generate':
-          const generated = this.autoGenerateValue(attributeId, channelAttributes, channelRawData);
-          if (generated !== undefined && generated !== '') {
-            result[attributeId] = generated;
-          }
-          break;
-
-        case 'upc_pool':
-          // 从 UPC 池获取未使用的 UPC
-          if (productSku) {
-            const upcCode = await this.upcService.autoAssignUpc(productSku, shopId);
-            if (upcCode) {
-              result[attributeId] = upcCode;
-            }
-          }
-          break;
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * 从路径提取值
-   */
-  private extractValueFromPath(
-    path: string,
-    channelAttributes: Record<string, any>,
-    channelRawData: Record<string, any>,
-  ): any {
-    // 直接从 channelAttributes 提取（简化路径）
-    if (channelAttributes && path in channelAttributes) {
-      return channelAttributes[path];
-    }
-
-    // 支持点号分隔的路径
-    const parts = path.split('.');
-    let source: any = channelAttributes;
-
-    if (parts[0] === 'channelAttributes') {
-      source = channelAttributes;
-      parts.shift();
-    } else if (parts[0] === 'channelRawData') {
-      source = channelRawData;
-      parts.shift();
-    }
-
-    let value = source;
-    for (const part of parts) {
-      if (value && typeof value === 'object' && part in value) {
-        value = value[part];
-      } else {
-        return undefined;
-      }
-    }
-
-    return value;
-  }
-
-  /**
-   * 自动生成属性值
-   */
-  private autoGenerateValue(
-    attributeId: string,
-    channelAttributes: Record<string, any>,
-    channelRawData: Record<string, any>,
-  ): any {
-    switch (attributeId.toLowerCase()) {
-      case 'brand':
-        return channelAttributes.brand || 'Unbranded';
-      case 'productname':
-        return channelRawData.title || channelAttributes.title;
-      case 'shortdescription':
-        return channelRawData.description?.substring(0, 500);
-      case 'keyfeatures':
-        if (channelAttributes.characteristics?.length > 0) {
-          return channelAttributes.characteristics.slice(0, 5);
-        }
-        return undefined;
-      default:
-        return undefined;
-    }
   }
 
   /**
@@ -393,39 +275,277 @@ export class ListingService {
    */
   async submitListing(dto: SubmitListingDto) {
     const { shopId, productIds } = dto;
+    const startTime = Date.now();
 
-    // 验证
-    const validation = await this.validateListing(productIds);
-    if (!validation.valid) {
-      throw new BadRequestException({
-        message: '商品信息不完整',
-        errors: validation.errors,
-      });
-    }
+    // 获取店铺信息
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+      include: { platform: true },
+    });
+    if (!shop) throw new NotFoundException('店铺不存在');
 
-    // 创建刊登任务
-    const task = await this.prisma.listingTask.create({
-      data: {
-        shopId,
-        status: 'pending',
-        totalCount: productIds.length,
+    // 获取商品列表
+    const products = await this.prisma.listingProduct.findMany({
+      where: { id: { in: productIds } },
+    });
+
+    // 创建刊登日志
+    const log = await this.listingLogService.create({
+      shopId,
+      action: 'submit',
+      productSku: products.map(p => p.sku).join(','),
+      requestData: {
         productIds,
+        productCount: products.length,
+        skus: products.map(p => p.sku),
       },
     });
 
-    // 更新商品状态
-    await this.prisma.listingProduct.updateMany({
-      where: { id: { in: productIds } },
-      data: { listingStatus: 'submitting' },
-    });
+    try {
+      // 验证
+      const validation = await this.validateListing(productIds);
+      if (!validation.valid) {
+        await this.listingLogService.fail(log.id, {
+          errorMessage: '商品信息不完整',
+          errorCode: 'VALIDATION_ERROR',
+          responseData: validation.errors,
+          duration: Date.now() - startTime,
+        });
+        throw new BadRequestException({
+          message: '商品信息不完整',
+          errors: validation.errors,
+        });
+      }
 
-    // TODO: 添加到队列处理实际刊登
+      // 更新日志状态为处理中
+      await this.listingLogService.setProcessing(log.id);
 
-    return {
-      taskId: task.id,
-      status: task.status,
-      totalCount: task.totalCount,
-    };
+      // 创建刊登任务
+      const task = await this.prisma.listingTask.create({
+        data: {
+          shopId,
+          status: 'pending',
+          totalCount: productIds.length,
+          productIds,
+        },
+      });
+
+      // 更新商品状态
+      await this.prisma.listingProduct.updateMany({
+        where: { id: { in: productIds } },
+        data: { listingStatus: 'submitting' },
+      });
+
+      // 调用平台 API 提交刊登
+      let feedId: string | null = null;
+      let successCount = 0;
+      let failCount = 0;
+      const errors: string[] = [];
+      
+      console.log(`[submitListing] Platform: ${shop.platform?.code}, Products: ${products.length}`);
+      
+      if (shop.platform?.code === 'walmart') {
+        // Walmart 平台
+        const adapter = PlatformAdapterFactory.create('walmart', shop.apiCredentials as any) as WalmartAdapter;
+        
+        // 记录所有提交的数据
+        const submittedItems: any[] = [];
+        
+        // 获取店铺的 Walmart 配置
+        const shopCredentials = shop.apiCredentials as any || {};
+        const walmartConfig = {
+          fulfillmentLagTime: shopCredentials.fulfillmentLagTime || '1',
+          fulfillmentMode: shopCredentials.fulfillmentMode || 'SELLER_FULFILLED',
+          fulfillmentCenterId: shopCredentials.fulfillmentCenterId || '',
+          shippingTemplate: shopCredentials.shippingTemplate || '',
+          region: shop.region || 'US',
+        };
+        
+        // 批量提交商品
+        for (const product of products) {
+          const channelAttrs = (product.channelAttributes as any) || {};
+          
+          // 重新解析属性（确保使用最新的映射规则和正确的数据格式）
+          let platformAttrs: Record<string, any> = {};
+          if (product.platformCategoryId && shop.platformId) {
+            const categoryMapping = await this.prisma.categoryAttributeMapping.findUnique({
+              where: {
+                platformId_country_categoryId: {
+                  platformId: shop.platformId,
+                  country: shop.region || 'US',
+                  categoryId: product.platformCategoryId,
+                },
+              },
+            });
+            
+            if (categoryMapping?.mappingRules) {
+              // 调试：输出渠道属性中的图片字段
+              console.log(`[submitListing] channelAttrs.mainImageUrl:`, channelAttrs.mainImageUrl);
+              console.log(`[submitListing] channelAttrs.imageUrls:`, channelAttrs.imageUrls);
+              
+              const resolveResult = await this.attributeResolver.resolveAttributes(
+                categoryMapping.mappingRules as any,
+                channelAttrs,
+                { 
+                  productSku: product.sku, 
+                  shopId,
+                  // 传递商品原价，用于价格计算（当 channelAttributes 中没有 price 时使用）
+                  productPrice: Number(product.price) || 0,
+                },
+              );
+              platformAttrs = resolveResult.attributes;
+              
+              // 调试：输出解析后的图片字段
+              console.log(`[submitListing] platformAttrs.mainImageUrl:`, platformAttrs.mainImageUrl);
+              console.log(`[submitListing] platformAttrs.productSecondaryImageURL:`, platformAttrs.productSecondaryImageURL);
+            }
+          }
+          
+          // 将平铺的 platformAttributes 转换为 Walmart V5.0 结构
+          // V5.0 结构: { Orderable: {...}, Visible: { [categoryName]: {...} } }
+          const itemData = this.convertToWalmartV5Format(platformAttrs, product.platformCategoryId, walmartConfig);
+          
+          console.log(`[submitListing] Submitting product: ${product.sku}`);
+          
+          // 为每个商品创建详细日志（只记录实际发送的数据）
+          const productLog = await this.listingLogService.create({
+            shopId,
+            action: 'submit',
+            productId: product.id,
+            productSku: product.sku,
+            requestData: itemData,  // 只记录实际发送给 Walmart 的数据
+          });
+          
+          try {
+            const result = await adapter.createItem(itemData);
+            
+            feedId = result.feedId;
+            console.log(`[submitListing] Product ${product.sku} submitted, feedId: ${feedId}`);
+            
+            // 更新商品日志为成功，响应数据只记录 Walmart 真实反馈
+            await this.listingLogService.complete(productLog.id, {
+              feedId: result.feedId,
+              responseData: result.walmartResponse,  // 只记录 Walmart API 真实响应
+              duration: Date.now() - startTime,
+            });
+            
+            // 创建 Feed 记录，submittedData 记录实际提交给 Walmart 的 Feed 数据
+            await this.listingFeedService.create({
+              shopId,
+              feedId: result.feedId,
+              feedType: 'MP_ITEM',
+              itemCount: 1,
+              productIds: [product.id],
+              submittedData: result.submittedFeedData,  // 实际提交的 Feed 数据
+            });
+            console.log(`[submitListing] Feed record created for ${product.sku}`);
+            
+            // 更新商品状态和 feedId
+            await this.prisma.listingProduct.update({
+              where: { id: product.id },
+              data: { listingStatus: 'pending' },
+            });
+            
+            submittedItems.push({ sku: product.sku, feedId: result.feedId, status: 'success' });
+            successCount++;
+          } catch (err: any) {
+            console.error(`[submitListing] Product ${product.sku} failed:`, err.message);
+            
+            // 更新商品日志为失败
+            await this.listingLogService.fail(productLog.id, {
+              errorMessage: err.message,
+              errorCode: 'WALMART_API_ERROR',
+              responseData: {
+                error: err.message,
+                submittedData: itemData,
+              },
+              duration: Date.now() - startTime,
+            });
+            
+            failCount++;
+            errors.push(`${product.sku}: ${err.message}`);
+            submittedItems.push({ sku: product.sku, status: 'failed', error: err.message });
+            
+            // 单个商品失败，记录错误但继续处理其他商品
+            await this.prisma.listingProduct.update({
+              where: { id: product.id },
+              data: { 
+                listingStatus: 'failed',
+                listingError: err.message,
+              },
+            });
+          }
+        }
+        
+        // 更新主日志，包含所有提交的数据汇总
+        await this.prisma.listingLog.update({
+          where: { id: log.id },
+          data: {
+            requestData: {
+              productIds,
+              productCount: products.length,
+              skus: products.map(p => p.sku),
+              submittedItems,
+            },
+          },
+        });
+        
+        console.log(`[submitListing] Completed: success=${successCount}, fail=${failCount}`);
+        
+        // 如果所有商品都失败了，抛出错误
+        if (successCount === 0 && failCount > 0) {
+          throw new BadRequestException({
+            message: `所有商品提交失败`,
+            errors: errors,
+          });
+        }
+      } else {
+        // 其他平台暂不支持
+        throw new BadRequestException(`平台 ${shop.platform?.code || '未知'} 暂不支持自动刊登`);
+      }
+
+      // 更新任务状态
+      await this.prisma.listingTask.update({
+        where: { id: task.id },
+        data: { 
+          status: successCount > 0 ? 'running' : 'failed',
+        },
+      });
+
+      // 完成日志
+      await this.listingLogService.complete(log.id, {
+        responseData: { 
+          taskId: task.id, 
+          status: successCount > 0 ? 'running' : 'failed', 
+          feedId,
+          successCount,
+          failCount,
+          errors: errors.length > 0 ? errors : undefined,
+        },
+        duration: Date.now() - startTime,
+      });
+
+      return {
+        taskId: task.id,
+        status: successCount > 0 ? 'running' : 'failed',
+        totalCount: task.totalCount,
+        feedId,
+        successCount,
+        failCount,
+        errors: errors.length > 0 ? errors : undefined,
+      };
+    } catch (error: any) {
+      // 如果不是验证错误（已经记录过），则记录失败日志
+      if (error.response?.message !== '商品信息不完整') {
+        await this.listingLogService.fail(log.id, {
+          errorMessage: error.message || '提交刊登失败',
+          errorCode: error.code || 'SUBMIT_ERROR',
+          responseData: error.response?.data,
+          duration: Date.now() - startTime,
+        });
+      }
+      throw error;
+    }
   }
 
   /**
@@ -464,5 +584,267 @@ export class ListingService {
     ]);
 
     return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+
+  /**
+   * 将平铺的属性转换为 Walmart V5.0 格式
+   * V5.0 结构: { Orderable: {...}, Visible: { [categoryName]: {...} } }
+   * 
+   * 参考 woo-walmart-sync 插件的实现:
+   * - Orderable 部分: sku, productIdentifiers, price, quantity, ShippingWeight, fulfillmentLagTime 等
+   * - Visible 部分: productName, mainImageUrl, productSecondaryImageURL, brand, shortDescription 等
+   * 
+   * @param platformAttrs 平铺的平台属性
+   * @param categoryId 类目ID（用于 Visible 层级）
+   * @param shopConfig 店铺配置（备货时间、履行中心等）
+   */
+  private convertToWalmartV5Format(
+    platformAttrs: Record<string, any>,
+    categoryId: string | null,
+    shopConfig?: {
+      fulfillmentLagTime?: string;
+      fulfillmentMode?: string;
+      fulfillmentCenterId?: string;
+      shippingTemplate?: string;
+      region?: string;
+    },
+  ): Record<string, any> {
+    // 如果已经是 V5.0 格式（有 Orderable 或 Visible），直接返回
+    if (platformAttrs.Orderable || platformAttrs.Visible) {
+      return platformAttrs;
+    }
+
+    // Orderable 字段列表（参考 woo-walmart-sync）
+    const orderableFields = [
+      'sku',
+      'productIdentifiers',
+      'price',
+      'quantity',
+      'ShippingWeight',
+      'shippingWeight',
+      'fulfillmentLagTime',
+      'stateRestrictions',
+      'electronicsIndicator',
+      'chemicalAerosolPesticide',
+      'batteryTechnologyType',
+      'shipsInOriginalPackaging',
+      'MustShipAlone',
+      'mustShipAlone',
+      'IsPreorder',
+      'isPreorder',
+      'releaseDate',
+      'startDate',
+      'endDate',
+      'fulfillmentCenterID',
+      'inventoryAvailabilityDate',
+      'ProductIdUpdate',
+      'productIdUpdate',
+      'SkuUpdate',
+      'skuUpdate',
+    ];
+
+    const orderable: Record<string, any> = {};
+    const visible: Record<string, any> = {};
+
+    // 分离 Orderable 和 Visible 字段
+    for (const [key, value] of Object.entries(platformAttrs)) {
+      if (value === undefined || value === null || value === '') {
+        continue;
+      }
+
+      // 检查是否为 Orderable 字段（不区分大小写）
+      const isOrderable = orderableFields.some(
+        (f) => f.toLowerCase() === key.toLowerCase(),
+      );
+
+      if (isOrderable) {
+        orderable[key] = value;
+      } else {
+        visible[key] = value;
+      }
+    }
+
+    // 应用店铺配置的默认值（只应用店铺设置中明确配置的字段）
+    if (shopConfig) {
+      // 备货时间 (fulfillmentLagTime) - 只有店铺设置中有值才应用
+      if (!orderable.fulfillmentLagTime && shopConfig.fulfillmentLagTime) {
+        orderable.fulfillmentLagTime = String(shopConfig.fulfillmentLagTime);
+      }
+
+      // 履行中心ID (fulfillmentCenterID) - 只有店铺设置中有值才应用
+      if (!orderable.fulfillmentCenterID && shopConfig.fulfillmentCenterId) {
+        orderable.fulfillmentCenterID = shopConfig.fulfillmentCenterId;
+      }
+      
+      // 注意：startDate 和 releaseDate 不再自动生成
+      // 如果需要这些字段，用户应该在类目属性映射中配置
+    }
+
+    // 构建 V5.0 结构
+    const result: Record<string, any> = {};
+
+    if (Object.keys(orderable).length > 0) {
+      result.Orderable = orderable;
+    }
+
+    if (Object.keys(visible).length > 0) {
+      // Visible 下需要有类目名称层级
+      // 如果有 categoryId，使用它作为 key；否则使用 'Default'
+      const categoryKey = categoryId || 'Default';
+      result.Visible = {
+        [categoryKey]: visible,
+      };
+    }
+
+    return result;
+  }
+
+  /**
+   * 刷新 Feed 状态（从 Walmart API 获取最新状态）
+   */
+  async refreshFeedStatus(feedRecordId: string) {
+    // 获取 Feed 记录
+    const feedRecord = await this.prisma.listingFeedRecord.findUnique({
+      where: { id: feedRecordId },
+      include: { shop: { include: { platform: true } } },
+    });
+    if (!feedRecord) throw new NotFoundException('Feed 记录不存在');
+
+    // 只支持 Walmart 平台
+    if (feedRecord.shop.platform?.code !== 'walmart') {
+      throw new BadRequestException('只支持 Walmart 平台的 Feed 状态刷新');
+    }
+
+    // 创建 Walmart 适配器
+    const adapter = PlatformAdapterFactory.create(
+      'walmart',
+      feedRecord.shop.apiCredentials as any,
+    ) as WalmartAdapter;
+
+    try {
+      // 从 Walmart API 获取 Feed 状态
+      console.log(`[refreshFeedStatus] Fetching feed status for ${feedRecord.feedId}`);
+      const feedStatus = await adapter.getFeedStatus(feedRecord.feedId, true, 0, 50);
+
+      // 解析状态
+      const status = feedStatus.feedStatus || 'UNKNOWN';
+      const itemsReceived = feedStatus.itemsReceived || 0;
+      const itemsSucceeded = feedStatus.itemsSucceeded || 0;
+      const itemsFailed = feedStatus.itemsFailed || 0;
+
+      // 映射状态
+      let mappedStatus: 'RECEIVED' | 'INPROGRESS' | 'PROCESSED' | 'ERROR' = 'RECEIVED';
+      if (status === 'PROCESSED') {
+        mappedStatus = itemsFailed > 0 && itemsSucceeded === 0 ? 'ERROR' : 'PROCESSED';
+      } else if (status === 'INPROGRESS') {
+        mappedStatus = 'INPROGRESS';
+      } else if (status === 'ERROR') {
+        mappedStatus = 'ERROR';
+      }
+
+      // 更新 Feed 记录
+      const updatedRecord = await this.listingFeedService.updateStatus(
+        feedRecord.shopId,
+        feedRecord.feedId,
+        {
+          status: mappedStatus,
+          successCount: itemsSucceeded,
+          failCount: itemsFailed,
+          feedDetail: feedStatus,
+          errorMessage: itemsFailed > 0 ? `${itemsFailed} 个商品处理失败` : undefined,
+        },
+      );
+
+      // 如果有关联的商品，更新商品状态并记录日志
+      const productIds = feedRecord.productIds as string[] | null;
+      const itemDetails = feedStatus.itemDetails?.itemIngestionStatus || [];
+      
+      // 为每个商品的处理结果创建日志
+      for (const item of itemDetails) {
+        const sku = item.sku;
+        const ingestionStatus = item.ingestionStatus;
+        const errors = item.ingestionErrors?.ingestionError || [];
+        
+        // 查找对应的商品
+        const product = await this.prisma.listingProduct.findFirst({
+          where: {
+            shopId: feedRecord.shopId,
+            sku,
+          },
+        });
+
+        // 创建 Feed 处理结果日志
+        const logData = {
+          shopId: feedRecord.shopId,
+          action: 'submit' as const,
+          productId: product?.id,
+          productSku: sku,
+          feedId: feedRecord.feedId,
+          requestData: { feedId: feedRecord.feedId, sku },
+        };
+        
+        const log = await this.listingLogService.create(logData);
+        
+        if (ingestionStatus === 'SUCCESS') {
+          // 成功日志
+          await this.listingLogService.complete(log.id, {
+            feedId: feedRecord.feedId,
+            responseData: {
+              ingestionStatus: 'SUCCESS',
+              message: 'Walmart 处理成功',
+            },
+          });
+          
+          // 更新商品状态
+          if (product) {
+            await this.prisma.listingProduct.update({
+              where: { id: product.id },
+              data: {
+                listingStatus: 'listed',
+                listingError: null,
+                lastListedAt: new Date(),
+              },
+            });
+          }
+        } else {
+          // 失败日志
+          const errorMsg = errors.map((e: any) => e.description || e.code).join('; ');
+          await this.listingLogService.fail(log.id, {
+            errorMessage: errorMsg || '处理失败',
+            errorCode: errors[0]?.code || 'WALMART_ERROR',
+            responseData: {
+              ingestionStatus,
+              errors: errors,
+            },
+          });
+          
+          // 更新商品状态
+          if (product) {
+            await this.prisma.listingProduct.update({
+              where: { id: product.id },
+              data: {
+                listingStatus: 'failed',
+                listingError: errorMsg || '处理失败',
+              },
+            });
+          }
+        }
+      }
+
+      console.log(`[refreshFeedStatus] Feed ${feedRecord.feedId} status: ${mappedStatus}, success: ${itemsSucceeded}, failed: ${itemsFailed}`);
+
+      return {
+        success: true,
+        feedId: feedRecord.feedId,
+        status: mappedStatus,
+        itemsReceived,
+        itemsSucceeded,
+        itemsFailed,
+        feedDetail: feedStatus,
+      };
+    } catch (error: any) {
+      console.error(`[refreshFeedStatus] Failed to refresh feed status:`, error.message);
+      throw new BadRequestException(`刷新 Feed 状态失败: ${error.message}`);
+    }
   }
 }

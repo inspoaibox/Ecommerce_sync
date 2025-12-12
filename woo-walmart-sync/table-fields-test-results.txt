@@ -1,0 +1,85 @@
+=== 桌子相关字段拓展功能测试 ===
+PHP版本: 8.3.23
+测试时间: 2025-09-26 06:24:03
+WordPress路径: D:\phpstudy_pro\WWW\canda.localhost
+加载WordPress...
+✅ WordPress加载成功
+✅ 映射器类加载成功
+
+1. 测试字段生成逻辑:
+
+测试产品 1: Outsunny 10' x 12' Outdoor Gazebo, Patio Gazebo Canopy Shelter w/Double Vented Roof, Zippered Mesh Sidewalls, Solid Steel Frame, Beige (ID: 23550)
+
+  测试字段: table_color
+    生成值: Black
+    转换值: Black
+    转换类型: string
+    ✅ table_color 验证通过
+
+  测试字段: table_top_type
+    生成值: Tray Top
+    转换值: Tray Top
+    转换类型: string
+    ✅ table_top_type 验证通过
+
+  测试字段: tableheight
+    生成值: null
+    转换值: null
+    转换类型: NULL
+    ✅ tableHeight 验证通过
+
+测试产品 2: Outsunny Porch Swing with Chains and Cupholders, 2 Person Wooden Patio Swing Chair, 440 lbs. Weight Capacity, for Garden, Poolside, Backyard, Brown (ID: 23549)
+
+  测试字段: table_color
+    生成值: Brown
+    转换值: Brown
+    转换类型: string
+    ✅ table_color 验证通过
+
+  测试字段: table_top_type
+    生成值: Tray Top
+    转换值: Tray Top
+    转换类型: string
+    ✅ table_top_type 验证通过
+
+  测试字段: tableheight
+    生成值: {"measure":22.5,"unit":"in"}
+    转换值: {"measure":22.5,"unit":"in"}
+    转换类型: array
+    ✅ tableHeight 验证通过
+
+测试产品 3: Outsunny 24' x 24' Outdoor Patio Sun Shade Sail Canopy Square UV Resistant - Navy Blue (ID: 23548)
+
+  测试字段: table_color
+    生成值: Blue
+    转换值: Blue
+    转换类型: string
+    ✅ table_color 验证通过
+
+  测试字段: table_top_type
+    生成值: Tray Top
+    转换值: Tray Top
+    转换类型: string
+    ✅ table_top_type 验证通过
+
+  测试字段: tableheight
+    生成值: null
+    转换值: null
+    转换类型: NULL
+    ✅ tableHeight 验证通过
+
+2. 测试v5_common_attributes配置:
+❌ get_v5_attributes_for_category函数不存在
+
+3. 测试前端配置:
+✅ autoGenerateFields数组 1 包含所有新字段
+✅ autoGenerateFields数组 2 包含所有新字段
+✅ 前端autoGenerateFields配置正确
+✅ 找到字段说明: table_color
+✅ 找到字段说明: table_top_type
+✅ 找到字段说明: tableHeight
+✅ 所有字段说明都已配置
+
+4. 模拟完整映射流程:
+
+=== 测试完成 ===

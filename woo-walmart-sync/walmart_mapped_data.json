@@ -1,0 +1,137 @@
+{
+    "MPItemFeedHeader": {
+        "businessUnit": "WALMART_US",
+        "locale": "en",
+        "version": "5.0.20241118-04_39_24-api"
+    },
+    "MPItem": [
+        {
+            "Orderable": {
+                "sku": "WF283081AAK",
+                "productIdentifiers": {
+                    "productIdType": "UPC",
+                    "productId": "763436603695"
+                },
+                "quantity": 319,
+                "batteryTechnologyType": "Does Not Contain a Battery",
+                "chemicalAerosolPesticide": "No",
+                "electronicsIndicator": "No",
+                "endDate": "2035-08-14T11:03:23Z",
+                "fulfillmentCenterID": "10002507137",
+                "fulfillmentLagTime": 1,
+                "IsPreorder": "No",
+                "MustShipAlone": "Yes",
+                "price": 398.64,
+                "ProductIdUpdate": "Yes",
+                "releaseDate": "2025-08-13T11:03:23Z",
+                "ShippingWeight": 85.98,
+                "shipsInOriginalPackaging": "Yes",
+                "SkuUpdate": "No",
+                "startDate": "2025-08-13T11:03:23Z",
+                "stateRestrictions": [
+                    {
+                        "stateRestrictionsText": "None"
+                    }
+                ]
+            },
+            "Visible": {
+                "Beds": {
+                    "productName": "Twin over Twin House Bunk Bed with Ladder and Slide,White",
+                    "mainImageUrl": "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220118_e142b3fa3643a4b1598eb82d487df506.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=90deda2fda4823c4b39f300393d65fd7",
+                    "productSecondaryImageURL": [
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220118_8fd92c158a40be55a7fc5b5507773c50.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=0ff16572d437a37f8e08cc2333c11f93",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220118_f833f9ab0314bb36a66ffd0acda18584.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=5f60dbc8d42ed4de3235e34bf926754a",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_3dfb4201242cd4215bec1a20b7ee17be.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=30425791631a982f93e009c26df4d03c",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_ee4d10f3dc0669560bfbc2589b7b5cb9.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=7a7b1612c9bc625f4bc4894fab6fc4bb",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_731d74ffcc0ce5f53a8603c753c61fd3.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=fba8c3e90ae5553d3d3a97464bcd4633",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_9b55cbd4505be191b2d9448fb20e000c.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=cc49bb2c33cb32f3bfe06077fa18af2f",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_584f38e1b78f4ac96bf5eeb5bc64b54a.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=3526f0a60baa50b7ac15734e833469c0",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_b013405f5a5a64ece7de9ec7ebb824bf.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=f569e756013b9f82a004e7d66ddd0e12",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_4c3877f7d0b71eab8d8ad009dd63b07c.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=a1c322c24c3d119feff69315585fba3e",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_6fd860025a9e003ac9f0965ec8a2e898.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=37470fa8af6acb93f2c59ebdd9ec9025",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220112_79f87c09ee12c0732e99b09946b841c4.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=1dbd80646cee7a50eb596998d9c1b604",
+                        "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20220208_78bc2cef55345f280eb5cec1c3a22e16.jpg?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=3d50c9ce214dcf51e349c1eb14080019"
+                    ],
+                    "ageGroup": [
+                        "Adult"
+                    ],
+                    "assembledProductHeight": {
+                        "measure": 71,
+                        "unit": "in"
+                    },
+                    "assembledProductLength": {
+                        "measure": 76.5,
+                        "unit": "in"
+                    },
+                    "assembledProductWeight": {
+                        "measure": 81.5,
+                        "unit": "lb"
+                    },
+                    "assembledProductWidth": {
+                        "measure": 40.5,
+                        "unit": "in"
+                    },
+                    "assemblyInstructions": "https:\/\/b2bfiles1.gigab2b.cn\/image\/wkseller\/31\/20230309_89778ed2b91102f8e52f27d9b5d79ab2.pdf?x-cc=20&x-cu=24361&x-ct=1755068400&x-cs=8e6f04282b02ab044678836f943cbbcc",
+                    "bed_type": "Standard Beds",
+                    "bedSize": "Twin",
+                    "box_spring_required": "Yes",
+                    "brand": "Unbranded",
+                    "collection": "Household beds and bed frames series",
+                    "color": "White",
+                    "colorCategory": [
+                        "White"
+                    ],
+                    "condition": "New",
+                    "configuration": "Ladder and Slide",
+                    "count": 1,
+                    "countPerPack": 1,
+                    "features": [
+                        "Under Bed Storage"
+                    ],
+                    "finish": "White",
+                    "gender": "Male",
+                    "has_storage": "Yes",
+                    "has_trundle": "No",
+                    "has_written_warranty": "Yes - Warranty Text",
+                    "homeDecorStyle": [
+                        "Rustic\/Lodge"
+                    ],
+                    "inflexKitComponent": "No",
+                    "isAssemblyRequired": "Yes",
+                    "isProp65WarningRequired": "No",
+                    "items_included": [
+                        "Ladder | Slide"
+                    ],
+                    "keyFeatures": [
+                        "Whimsical House Design: This twin over twin bunk bed features a charming house-shaped frame, fostering imagination and transforming any bedroom into a playful haven.",
+                        "Enhanced Safety Features: Equipped with sturdy guardrails on the upper bunk and a robust metal frame, ensuring a secure and worry-free sleep environment for your child.",
+                        "Fun and Functional Design: Includes a built-in ladder and a thrilling slide, offering versatile play options and making bedtime a delightful adventure for kids.",
+                        "Durable Construction: Crafted from high-quality, long-lasting metal, this bunk bed is designed to withstand daily use while providing a stable and reliable structure.",
+                        "Space-Saving Solution: The twin over twin bunk bed design is perfect for maximizing space in smaller rooms, making it an ideal choice for shared bedrooms or kids' rooms."
+                    ],
+                    "manufacturer": "Breezy Basket",
+                    "material": [
+                        "Metal"
+                    ],
+                    "multipackQuantity": 1,
+                    "netContent": {
+                        "productNetContentMeasure": 1,
+                        "productNetContentUnit": "Count"
+                    },
+                    "numberOfDrawers": 0,
+                    "numberOfShelves": 0,
+                    "pieceCount": 1,
+                    "profile": "Standard Profile",
+                    "shortDescription": "Product Information<br>Product Size: 76.50 in × 40.50 in × 71.00 in<br>Bed Type: Standard Beds<br>Configuration: Ladder and Slide<br>Finish: White<br>Has Storage: NO<br>Items Included: Ladder | Slide<br>MaximumLoadWeight: 220<br>BedSize: Twin<br>Product Weight: 81.50 lb<br>Package Size: 78.35 in × 17.91 in × 5.91 in<br>Package Weight: 85.98 lb<br>Customized: No<br>Main Color: White<br>Main Material: Metal<br><br>Product Features<br><h1>Twin over Twin House Bunk Bed with Ladder and Slide, White<\/h1><\/br>\n\n<h2>Create a Dream Bedroom with Our House Bunk Bed!<\/h2><\/br>\n\nTransform your child's bedroom into a magical play space with our Twin over Twin House Bunk Bed. This charming bed blends functionality, safety, and fun, making bedtime an exciting adventure. Bring home a bed that's more than just a place to sleep – it's a whole world of imagination! <\/br>\n\n<h3>Key Features:<\/h3><\/br>\n\n<ul>\n  <li><b>Playhouse Design:<\/b> The whimsical house-shaped frame sparks imagination and adds a touch of playful elegance to any room. Let your child's dreams take flight in their very own house!<\/li>\n  <li><b>Sturdy Construction:<\/b> Crafted from a durable metal frame, this bunk bed is built to last, providing a safe and reliable sleeping space. Built to withstand years of use, this bed offers peace of mind.<\/li>\n  <li><b>Safety First:<\/b> The upper bunk features high guardrails, ensuring peace of mind while your little one sleeps soundly. Rest easy knowing your child is safe and secure.<\/li>\n  <li><b>Convertible Ladder and Slide:<\/b> Includes a built-in ladder and a fun slide, which can be positioned on either the left or right side to fit your room layout. Customize the bed to perfectly fit your space!<\/li>\n  <li><b>Easy Assembly:<\/b> All parts, tools, and instructions are included for a straightforward setup, typically completed in under an hour with assistance. Get ready for fun fast with easy assembly!<\/li>\n<\/ul><\/br>\n\n<h3>Benefits You'll Appreciate:<\/h3><\/br>\n\nThis bunk bed offers a smart, space-saving solution, perfect for smaller bedrooms or shared spaces. The lower height design makes it ideal for younger children, providing easy access to the upper bunk. The integrated slide and ladder add an element of excitement, turning bedtime into a fun adventure. The crisp white finish complements any decor style, making it a versatile addition to your home. This is a great choice for <b>kids bunk beds<\/b>, a <b>twin over twin bunk bed<\/b>, and a <b>bunk bed with slide<\/b>. It's the perfect blend of practicality and play! <\/br>\n\n<h3>Materials and Specifications:<\/h3><\/br>\n\n<ul>\n  <li><b>Material:<\/b> Durable Metal<\/li>\n  <li><b>Color:<\/b> White<\/li>\n  <li><b>Size:<\/b> Twin over Twin<\/li>\n  <li><b>Overall Product Dimensions:<\/b> 76.5''L x 40.5''W x 71''H<\/li>\n  <li><b>Upper Bed Weight Capacity:<\/b> 220 lbs<\/li>\n  <li><b>Recommended Mattress Thickness (Upper\/Lower):<\/b> 6” \/ 8-10”<\/li>\n<\/ul><\/br>\n\n<h3>Perfect For:<\/h3><\/br>\n\nThis bunk bed is a great choice for <b>children's bedrooms<\/b>. Create a cozy and fun environment where they can sleep, play, and grow. Consider it for <b>kids room furniture<\/b> or a <b>white bunk bed<\/b>. Make bedtime a cherished experience! This bed is a wonderful addition to any child's space. <\/br>\n\nBring joy and functionality to your child's bedroom with our Twin over Twin House Bunk Bed. It’s a perfect blend of style, safety, and fun! This <b>house bunk bed<\/b> is sure to be a hit!",
+                    "smallPartsWarnings": [
+                        "0 - No warning applicable"
+                    ],
+                    "suggested_number_of_people_for_assembly": 2,
+                    "theme": "Multi-theme",
+                    "upholstered": "No",
+                    "warrantyText": "This warranty does not cover damages caused by misuse, drops, or human error."
+                }
+            }
+        }
+    ]
+}

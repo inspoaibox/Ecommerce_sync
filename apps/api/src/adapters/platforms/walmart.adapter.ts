@@ -717,6 +717,44 @@ export class WalmartAdapter extends BasePlatformAdapter {
   }
 
   /**
+   * 获取类目属性原始响应（用于调试）
+   * 返回 V5.0 Item Spec API 的原始 JSON Schema 响应
+   */
+  async getCategoryAttributesRaw(categoryId: string): Promise<any> {
+    try {
+      const headers = await this.getHeaders();
+
+      console.log(`[Walmart] Fetching raw V5.0 spec for productType: ${categoryId}`);
+
+      const requestBody = {
+        feedType: 'MP_ITEM',
+        version: '5.0.20241118-04_39_24-api',
+        productTypes: [categoryId],
+      };
+
+      const response = await this.client.post('/v3/items/spec', requestBody, {
+        headers,
+      });
+
+      return {
+        requestBody,
+        response: response.data,
+        categoryId,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      const errData = error.response?.data;
+      const errMsg = errData?.error?.[0]?.description || errData?.message || error.message;
+      return {
+        error: errMsg,
+        errorDetails: errData,
+        categoryId,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
    * 获取类目属性
    * 使用 V5.0 Item Spec API: POST /v3/items/spec
    * 参考 woo-walmart-sync 插件的实现
@@ -730,6 +768,10 @@ export class WalmartAdapter extends BasePlatformAdapter {
     isMultiSelect: boolean;
     maxLength?: number;
     enumValues?: string[];
+    conditionalRequired?: Array<{
+      dependsOn: string;
+      dependsOnValue: string;
+    }>;
   }>> {
     try {
       const headers = await this.getHeaders();
@@ -783,6 +825,10 @@ export class WalmartAdapter extends BasePlatformAdapter {
     isMultiSelect: boolean;
     maxLength?: number;
     enumValues?: string[];
+    conditionalRequired?: Array<{
+      dependsOn: string;
+      dependsOnValue: string;
+    }>;
   }> {
     const attributes: Array<{
       attributeId: string;
@@ -793,7 +839,14 @@ export class WalmartAdapter extends BasePlatformAdapter {
       isMultiSelect: boolean;
       maxLength?: number;
       enumValues?: string[];
+      conditionalRequired?: Array<{
+        dependsOn: string;
+        dependsOnValue: string;
+      }>;
     }> = [];
+    
+    // 存储条件必填规则，稍后合并到属性中
+    const conditionalRequiredMap = new Map<string, Array<{ dependsOn: string; dependsOnValue: string }>>();
 
     try {
       console.log('[Walmart] Parsing V5 spec response, keys:', Object.keys(data || {}));
@@ -833,8 +886,38 @@ export class WalmartAdapter extends BasePlatformAdapter {
           if (propDef.properties[categoryId]?.properties) {
             const visibleProps = propDef.properties[categoryId].properties;
             const visibleRequired = propDef.properties[categoryId].required || [];
+            const visibleAllOf = propDef.properties[categoryId].allOf || [];
 
             console.log(`[Walmart] Found Visible properties for ${categoryId}: ${Object.keys(visibleProps).length}`);
+            console.log(`[Walmart] Found allOf conditions: ${visibleAllOf.length}`);
+            if (visibleAllOf.length > 0) {
+              console.log(`[Walmart] allOf sample:`, JSON.stringify(visibleAllOf[0], null, 2));
+            }
+
+            // 解析 allOf 条件必填规则
+            // 格式: { if: { properties: { fieldA: { enum: ["value"] } } }, then: { required: ["fieldB"] } }
+            for (const condition of visibleAllOf) {
+              if (condition.if?.properties && condition.then?.required) {
+                const ifProps = condition.if.properties;
+                const thenRequired = condition.then.required;
+                
+                for (const [dependsOn, dependsDef] of Object.entries(ifProps) as [string, any][]) {
+                  if (dependsDef.enum && Array.isArray(dependsDef.enum)) {
+                    for (const dependsOnValue of dependsDef.enum) {
+                      for (const requiredField of thenRequired) {
+                        if (!conditionalRequiredMap.has(requiredField)) {
+                          conditionalRequiredMap.set(requiredField, []);
+                        }
+                        conditionalRequiredMap.get(requiredField)!.push({
+                          dependsOn,
+                          dependsOnValue,
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            }
 
             for (const [nestedName, nestedDef] of Object.entries(visibleProps) as [string, any][]) {
               const attr = this.extractAttributeFromSchema(
@@ -871,7 +954,16 @@ export class WalmartAdapter extends BasePlatformAdapter {
         if (attr) attributes.push(attr);
       }
 
+      // 合并条件必填规则到属性中
+      for (const attr of attributes) {
+        const conditionalRules = conditionalRequiredMap.get(attr.attributeId);
+        if (conditionalRules && conditionalRules.length > 0) {
+          attr.conditionalRequired = conditionalRules;
+        }
+      }
+
       console.log(`[Walmart] Total attributes parsed: ${attributes.length}`);
+      console.log(`[Walmart] Conditional required rules: ${conditionalRequiredMap.size}`);
       return attributes;
     } catch (error) {
       console.error('[Walmart] Error parsing V5 spec response:', error);
@@ -895,6 +987,10 @@ export class WalmartAdapter extends BasePlatformAdapter {
     isMultiSelect: boolean;
     maxLength?: number;
     enumValues?: string[];
+    conditionalRequired?: Array<{
+      dependsOn: string;
+      dependsOnValue: string;
+    }>;
   } | null {
     if (!propertyName || !propertyDef) return null;
 
@@ -986,49 +1082,30 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
   /**
    * 创建商品（使用 Feed API）
+   * 支持 V5.0 格式（Orderable + Visible 结构）
+   * 
+   * item 结构应为:
+   * {
+   *   Orderable: { sku, productIdentifiers, price, quantity, ... },
+   *   Visible: { [categoryName]: { productName, mainImageUrl, ... } }
+   * }
+   * 
+   * 或者平铺格式（向后兼容）:
+   * { sku, productName, price, ... }
    */
-  async createItem(item: {
-    sku: string;
-    productIdType: string;
-    productId: string;
-    title: string;
-    brand: string;
-    price: number;
-    description?: string;
-    mainImageUrl?: string;
-    additionalImageUrls?: string[];
-    category?: string;
-    attributes?: Record<string, any>;
-  }): Promise<{ feedId: string }> {
+  async createItem(item: Record<string, any>): Promise<{ feedId: string; walmartResponse?: any; submittedFeedData?: any }> {
     try {
       const headers = await this.getHeaders();
 
-      // 构建 MP_ITEM Feed 数据
+      // 构建 MP_ITEM Feed 数据 - V5.0 格式
+      // 参考 woo-walmart-sync 插件的实现
       const feedData = {
         MPItemFeedHeader: {
-          version: '4.2',
-          requestId: this.generateCorrelationId(),
-          requestBatchId: this.generateCorrelationId(),
+          businessUnit: 'WALMART_US',  // V5.0 必需字段
+          locale: 'en',
+          version: '5.0.20241118-04_39_24-api',  // V5.0 完整版本号
         },
-        MPItem: [
-          {
-            sku: item.sku,
-            productIdentifiers: {
-              productIdType: item.productIdType,
-              productId: item.productId,
-            },
-            productName: item.title,
-            brand: item.brand,
-            price: {
-              currency: 'USD',
-              amount: item.price,
-            },
-            ShortDescription: item.description,
-            mainImageUrl: item.mainImageUrl,
-            additionalImageUrls: item.additionalImageUrls,
-            ...item.attributes,
-          },
-        ],
+        MPItem: [item],  // 直接使用传入的数据，所有字段由类目属性映射配置决定
       };
 
       const FormData = require('form-data');
@@ -1046,7 +1123,11 @@ export class WalmartAdapter extends BasePlatformAdapter {
         params: { feedType: 'MP_ITEM' },
       });
 
-      return { feedId: response.data.feedId };
+      return { 
+        feedId: response.data.feedId,
+        walmartResponse: response.data,  // 返回完整的 Walmart 响应
+        submittedFeedData: feedData,     // 返回实际提交的 Feed 数据
+      };
     } catch (error: any) {
       const errMsg = error.response?.data?.error?.[0]?.description || error.message;
       throw new Error(`创建商品失败: ${errMsg}`);

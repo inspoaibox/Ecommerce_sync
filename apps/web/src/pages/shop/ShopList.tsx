@@ -11,7 +11,7 @@ const PLATFORM_PRESETS: Record<string, {
   code: string;
   apiBaseUrl: string;
   regions: { value: string; label: string }[];
-  fields: { key: string; label: string; required?: boolean; placeholder?: string; type?: 'text' | 'password' }[];
+  fields: { key: string; label: string; required?: boolean; placeholder?: string; type?: 'text' | 'password' | 'number' | 'select' }[];
 }> = {
   walmart: {
     name: 'Walmart',
@@ -27,6 +27,10 @@ const PLATFORM_PRESETS: Record<string, {
       { key: 'clientSecret', label: 'Client Secret', required: true, placeholder: '请输入Walmart Client Secret', type: 'password' },
       { key: 'accessToken', label: 'Access Token', required: false, placeholder: '首次授权后自动获取（可选）', type: 'password' },
       { key: 'refreshToken', label: 'Refresh Token', required: false, placeholder: '用于刷新Access Token（可选）', type: 'password' },
+      { key: 'fulfillmentLagTime', label: '备货时间 (天)', required: false, placeholder: '收到订单后准备发货的天数，默认1天', type: 'number' },
+      { key: 'fulfillmentMode', label: '发货模式', required: false, placeholder: '选择发货模式', type: 'select' },
+      { key: 'fulfillmentCenterId', label: '履行中心ID', required: false, placeholder: '如：10001234567，留空使用默认值' },
+      { key: 'shippingTemplate', label: '运输模板', required: false, placeholder: '运输模板名称，留空使用默认设置' },
     ],
   },
   amazon: {
@@ -340,6 +344,13 @@ export default function ShopList() {
             >
               {field.type === 'password' ? (
                 <Input.Password placeholder={field.placeholder} visibilityToggle />
+              ) : field.type === 'number' ? (
+                <Input type="number" placeholder={field.placeholder} min={0} max={30} />
+              ) : field.type === 'select' && field.key === 'fulfillmentMode' ? (
+                <Select placeholder={field.placeholder} allowClear>
+                  <Select.Option value="SELLER_FULFILLED">卖家自发货 (Seller Fulfilled)</Select.Option>
+                  <Select.Option value="WFS">沃尔玛发货 (WFS)</Select.Option>
+                </Select>
               ) : (
                 <Input placeholder={field.placeholder} />
               )}

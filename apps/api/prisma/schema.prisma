@@ -21,6 +21,7 @@ model Channel {
   products        Product[]
   syncRules       SyncRule[]
   listingProducts ListingProduct[]   @relation("ListingProducts")
+  productPool     ProductPool[]      @relation("ProductPool")
 
   @@map("channels")
 }
@@ -79,6 +80,8 @@ model Shop {
   syncRules       SyncRule[]
   listingProducts ListingProduct[] @relation("ListingProducts")
   listingTasks    ListingTask[]    @relation("ListingTasks")
+  listingLogs     ListingLog[]     @relation("ListingLogs")
+  listingFeedRecords ListingFeedRecord[] @relation("ListingFeedRecords")
 
   @@map("shops")
 }
@@ -325,36 +328,79 @@ enum AutoSyncStage {
 
 // ==================== 商品刊登模块 ====================
 
-model ListingProduct {
+// ==================== 商品池（渠道商品基础数据，与店铺无关）====================
+model ProductPool {
   id              String        @id @default(uuid())
-  shopId          String        @map("shop_id")
   channelId       String        @map("channel_id")
 
-  // 基本信息（通用字段）
+  // 基本信息
   sku             String        @db.VarChar(100)
   title           String        @db.VarChar(500)
   description     String?       @db.Text
 
-  // 图片（通用）
+  // 图片
   mainImageUrl    String?       @map("main_image_url")
   imageUrls       Json?         @map("image_urls")
   videoUrls       Json?         @map("video_urls")
 
-  // 价格库存（通用）
+  // 价格库存
   price           Decimal       @db.Decimal(10, 2)
   stock           Int           @default(0)
   currency        String        @default("USD") @db.VarChar(10)
 
-  // 渠道原始数据（完整保存，支持扩展）
+  // 渠道原始数据
   channelRawData  Json?         @map("channel_raw_data")
 
-  // 渠道标准化属性（从原始数据提取的常用字段）
+  // 渠道标准化属性
+  channelAttributes Json?       @map("channel_attributes")
+
+  // 平台类目（可预设）
+  platformCategoryId String?    @map("platform_category_id")
+
+  // 时间戳
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // 关联
+  channel         Channel       @relation("ProductPool", fields: [channelId], references: [id])
+  listingProducts ListingProduct[] @relation("PoolToListing")
+
+  @@unique([channelId, sku])
+  @@map("product_pool")
+}
+
+// ==================== 刊登商品（关联商品池 + 店铺）====================
+model ListingProduct {
+  id              String        @id @default(uuid())
+  shopId          String        @map("shop_id")
+  productPoolId   String?       @map("product_pool_id")  // 关联商品池（可选）
+  channelId       String        @map("channel_id")
+
+  // 基本信息（可从商品池继承或独立设置）
+  sku             String        @db.VarChar(100)
+  title           String        @db.VarChar(500)
+  description     String?       @db.Text
+
+  // 图片
+  mainImageUrl    String?       @map("main_image_url")
+  imageUrls       Json?         @map("image_urls")
+  videoUrls       Json?         @map("video_urls")
+
+  // 价格库存（店铺可独立设置）
+  price           Decimal       @db.Decimal(10, 2)
+  stock           Int           @default(0)
+  currency        String        @default("USD") @db.VarChar(10)
+
+  // 渠道原始数据
+  channelRawData  Json?         @map("channel_raw_data")
+
+  // 渠道标准化属性
   channelAttributes Json?       @map("channel_attributes")
 
   // 平台类目映射
   platformCategoryId String?    @map("platform_category_id")
 
-  // 平台属性填写值
+  // 平台属性填写值（店铺特定）
   platformAttributes Json?      @map("platform_attributes")
 
   // 平台特有字段
@@ -380,6 +426,7 @@ model ListingProduct {
   // 关联
   shop            Shop          @relation("ListingProducts", fields: [shopId], references: [id], onDelete: Cascade)
   channel         Channel       @relation("ListingProducts", fields: [channelId], references: [id])
+  productPool     ProductPool?  @relation("PoolToListing", fields: [productPoolId], references: [id])
 
   @@unique([shopId, sku])
   @@map("listing_products")
@@ -530,4 +577,404 @@ model UpcPool {
   @@index([isUsed])
   @@index([shopId])
   @@map("upc_pool")
+}
+
+
+// ==================== AI 优化模块 ====================
+
+// AI 模型配置（一个渠道配置，包含多个模型）
+model AiModel {
+  id              String        @id @default(uuid())
+  name            String        @db.VarChar(100)  // 渠道名称，如"中转接口"
+  type            AiModelType   // openai, gemini, openai_compatible
+  
+  // 连接配置
+  apiKey          String        @map("api_key") @db.VarChar(500)
+  baseUrl         String?       @map("base_url") @db.VarChar(255)  // OpenAI 兼容接口需要
+  
+  // 兼容旧字段（单个模型）
+  modelName       String?       @map("model_name") @db.VarChar(100)
+  
+  // 模型列表（JSON数组）
+  // 格式: [{ "id": "gpt-4", "name": "gpt-4", "maxTokens": 8192 }, ...]
+  modelList       Json          @default("[]") @map("model_list")
+  
+  // 默认模型（从 modelList 中选一个）
+  defaultModel    String?       @map("default_model") @db.VarChar(100)
+  
+  // 默认参数
+  maxTokens       Int           @default(2000) @map("max_tokens")
+  temperature     Decimal       @default(0.7) @db.Decimal(3, 2)
+  
+  // 状态
+  isDefault       Boolean       @default(false) @map("is_default")
+  status          Status        @default(active)
+  
+  // 时间戳
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  
+  // 关联
+  optimizationLogs AiOptimizationLog[]
+  
+  @@map("ai_models")
+}
+
+enum AiModelType {
+  openai
+  gemini
+  openai_compatible
+}
+
+// Prompt 模板
+model PromptTemplate {
+  id              String        @id @default(uuid())
+  name            String        @db.VarChar(100)
+  type            PromptType    // title, description, bullet_points, keywords, general
+  content         String        @db.Text
+  description     String?       @db.VarChar(500)
+  
+  // 是否系统预设
+  isSystem        Boolean       @default(false) @map("is_system")
+  isDefault       Boolean       @default(false) @map("is_default")
+  
+  // 状态
+  status          Status        @default(active)
+  
+  // 时间戳
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  
+  // 关联
+  optimizationLogs AiOptimizationLog[]
+  
+  @@map("prompt_templates")
+}
+
+enum PromptType {
+  title
+  description
+  bullet_points
+  keywords
+  general
+}
+
+// AI 优化日志
+model AiOptimizationLog {
+  id              String              @id @default(uuid())
+  
+  // 关联商品
+  productType     String              @map("product_type") @db.VarChar(20) // pool, listing
+  productId       String              @map("product_id")
+  productSku      String              @map("product_sku") @db.VarChar(100)
+  
+  // 优化配置
+  modelId         String              @map("model_id")
+  templateId      String?             @map("template_id")
+  field           String              @db.VarChar(50) // title, description, bullet_points, keywords
+  
+  // 内容
+  originalContent String?             @map("original_content") @db.Text
+  optimizedContent String?            @map("optimized_content") @db.Text
+  promptUsed      String?             @map("prompt_used") @db.Text
+  
+  // 统计
+  promptTokens    Int                 @default(0) @map("prompt_tokens")
+  completionTokens Int                @default(0) @map("completion_tokens")
+  totalTokens     Int                 @default(0) @map("total_tokens")
+  duration        Int                 @default(0) // 毫秒
+  
+  // 状态
+  status          AiOptLogStatus      @default(pending)
+  errorMessage    String?             @map("error_message")
+  
+  // 是否已应用
+  isApplied       Boolean             @default(false) @map("is_applied")
+  appliedAt       DateTime?           @map("applied_at")
+  
+  // 时间戳
+  createdAt       DateTime            @default(now()) @map("created_at")
+  
+  // 关联
+  model           AiModel             @relation(fields: [modelId], references: [id])
+  template        PromptTemplate?     @relation(fields: [templateId], references: [id])
+  
+  @@index([productType, productId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("ai_optimization_logs")
+}
+
+enum AiOptLogStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+// ==================== 刊登日志模块 ====================
+
+// 刊登日志（详细记录每次刊登操作）
+model ListingLog {
+  id              String            @id @default(uuid())
+  shopId          String            @map("shop_id")
+  
+  // 操作类型
+  action          ListingLogAction  // submit, validate, retry
+  
+  // 商品信息
+  productId       String?           @map("product_id")
+  productSku      String?           @map("product_sku") @db.VarChar(100)
+  
+  // 请求数据
+  requestData     Json?             @map("request_data")
+  
+  // 响应数据
+  responseData    Json?             @map("response_data")
+  
+  // 状态
+  status          ListingLogStatus  @default(pending)
+  errorMessage    String?           @map("error_message") @db.Text
+  errorCode       String?           @map("error_code") @db.VarChar(50)
+  
+  // 关联 Feed
+  feedId          String?           @map("feed_id") @db.VarChar(100)
+  
+  // 耗时（毫秒）
+  duration        Int               @default(0)
+  
+  // 时间戳
+  createdAt       DateTime          @default(now()) @map("created_at")
+  
+  // 关联
+  shop            Shop              @relation("ListingLogs", fields: [shopId], references: [id], onDelete: Cascade)
+  
+  @@index([shopId])
+  @@index([productSku])
+  @@index([status])
+  @@index([createdAt])
+  @@map("listing_logs")
+}
+
+enum ListingLogAction {
+  submit      // 提交刊登
+  validate    // 验证
+  retry       // 重试
+  update      // 更新
+}
+
+enum ListingLogStatus {
+  pending     // 待处理
+  processing  // 处理中
+  success     // 成功
+  failed      // 失败
+}
+
+// 刊登 Feed 记录（批量刊登的 Feed 跟踪）
+model ListingFeedRecord {
+  id              String              @id @default(uuid())
+  shopId          String              @map("shop_id")
+  
+  // Feed 信息
+  feedId          String              @map("feed_id") @db.VarChar(100)
+  feedType        String              @default("item") @map("feed_type") @db.VarChar(50) // item, MP_ITEM
+  
+  // 商品数量
+  itemCount       Int                 @default(0) @map("item_count")
+  
+  // 状态
+  status          ListingFeedStatus   @default(RECEIVED)
+  successCount    Int                 @default(0) @map("success_count")
+  failCount       Int                 @default(0) @map("fail_count")
+  
+  // 错误信息
+  errorMessage    String?             @map("error_message") @db.Text
+  
+  // 详情数据（缓存 Walmart API 返回的详情）
+  feedDetail      Json?               @map("feed_detail")
+  
+  // 提交的数据（用于追踪）
+  submittedData   Json?               @map("submitted_data")
+  
+  // 关联的商品 ID 列表
+  productIds      Json?               @map("product_ids")
+  
+  // 时间戳
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  completedAt     DateTime?           @map("completed_at")
+  
+  // 关联
+  shop            Shop                @relation("ListingFeedRecords", fields: [shopId], references: [id], onDelete: Cascade)
+  
+  @@unique([shopId, feedId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("listing_feed_records")
+}
+
+enum ListingFeedStatus {
+  RECEIVED      // 已接收
+  INPROGRESS    // 处理中
+  PROCESSED     // 已完成
+  ERROR         // 失败
+}
+
+
+// ==================== 图片处理模块 ====================
+
+// 图片处理参数配置
+model ImageProcessConfig {
+  id              String    @id @default(uuid())
+  name            String    @default("默认配置") @db.VarChar(100)
+  
+  // 文件大小限制（MB）
+  maxSizeMB       Decimal   @default(5) @map("max_size_mb") @db.Decimal(5, 2)
+  
+  // 图片比例要求
+  forceSquare     Boolean   @default(true) @map("force_square")  // 强制1:1
+  aspectRatio     String?   @map("aspect_ratio") @db.VarChar(20) // 如 "1:1", "4:3"
+  
+  // 目标尺寸
+  targetWidth     Int       @default(2000) @map("target_width")
+  targetHeight    Int?      @map("target_height")
+  
+  // 输出格式
+  outputFormat    String    @default("jpeg") @map("output_format") @db.VarChar(10)
+  quality         Int       @default(85)
+  
+  // 是否默认配置
+  isDefault       Boolean   @default(false) @map("is_default")
+  
+  // 时间戳
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // 关联
+  tasks           ImageProcessTask[]
+  
+  @@map("image_process_configs")
+}
+
+// 图片处理任务
+model ImageProcessTask {
+  id              String              @id @default(uuid())
+  
+  // 任务名称
+  name            String              @db.VarChar(200)
+  
+  // 处理范围
+  scope           ImageProcessScope   // all, category, sku_list
+  scopeValue      String?             @map("scope_value") @db.Text  // 类目ID 或 SKU列表(JSON)
+  
+  // 配置
+  configId        String?             @map("config_id")
+  
+  // 统计
+  totalCount      Int                 @default(0) @map("total_count")
+  processedCount  Int                 @default(0) @map("processed_count")
+  successCount    Int                 @default(0) @map("success_count")
+  failCount       Int                 @default(0) @map("fail_count")
+  skippedCount    Int                 @default(0) @map("skipped_count")
+  
+  // 状态
+  status          ImageTaskStatus     @default(pending)
+  errorMessage    String?             @map("error_message") @db.Text
+  
+  // 时间戳
+  startedAt       DateTime?           @map("started_at")
+  finishedAt      DateTime?           @map("finished_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  
+  // 关联
+  config          ImageProcessConfig? @relation(fields: [configId], references: [id])
+  logs            ImageProcessLog[]
+  
+  @@index([status])
+  @@index([createdAt])
+  @@map("image_process_tasks")
+}
+
+// 图片处理日志（每张图片的处理记录）
+model ImageProcessLog {
+  id              String              @id @default(uuid())
+  taskId          String              @map("task_id")
+  
+  // 商品信息
+  productPoolId   String?             @map("product_pool_id")
+  productSku      String              @map("product_sku") @db.VarChar(100)
+  
+  // 图片信息
+  imageType       String              @map("image_type") @db.VarChar(20)  // main, additional
+  imageIndex      Int                 @default(0) @map("image_index")     // 附图索引
+  originalUrl     String              @map("original_url") @db.Text
+  
+  // 原始图片信息
+  originalSize    Int                 @default(0) @map("original_size")   // 字节
+  originalWidth   Int                 @default(0) @map("original_width")
+  originalHeight  Int                 @default(0) @map("original_height")
+  
+  // 处理后信息
+  processedUrl    String?             @map("processed_url") @db.Text
+  processedSize   Int?                @map("processed_size")
+  processedWidth  Int?                @map("processed_width")
+  processedHeight Int?                @map("processed_height")
+  
+  // 处理操作
+  operations      Json?               // ["裁剪为1:1", "压缩至85%"]
+  wasProcessed    Boolean             @default(false) @map("was_processed")
+  
+  // 状态
+  status          ImageLogStatus      @default(pending)
+  errorMessage    String?             @map("error_message")
+  
+  // 时间戳
+  createdAt       DateTime            @default(now()) @map("created_at")
+  
+  // 关联
+  task            ImageProcessTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  @@index([taskId])
+  @@index([productSku])
+  @@index([status])
+  @@map("image_process_logs")
+}
+
+enum ImageProcessScope {
+  all           // 所有商品
+  category      // 按平台类目
+  sku_list      // SKU列表
+}
+
+enum ImageTaskStatus {
+  pending       // 待开始
+  running       // 运行中
+  paused        // 已暂停
+  completed     // 已完成
+  failed        // 失败
+  cancelled     // 已取消
+}
+
+enum ImageLogStatus {
+  pending       // 待处理
+  processing    // 处理中
+  success       // 成功
+  failed        // 失败
+  skipped       // 跳过（不需要处理）
+}
+
+// ==================== 不可售平台配置 ====================
+
+// 不可售平台（从渠道商品中自动收集）
+model UnavailablePlatform {
+  id              String    @id @default(uuid())
+  platformId      String    @map("platform_id") @db.VarChar(50)  // 渠道返回的平台ID
+  platformName    String    @map("platform_name") @db.VarChar(100)  // 平台名称
+  channelId       String?   @map("channel_id")  // 来源渠道
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  @@unique([platformId, channelId])
+  @@map("unavailable_platforms")
 }

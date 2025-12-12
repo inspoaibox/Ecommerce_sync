@@ -1,6 +1,13 @@
 import { BaseChannelAdapter, ChannelProduct, FetchOptions, FetchResult } from './base.adapter';
+import { ChannelAttributeDefinition } from './standard-product.interface';
+import { parseNumber, calculateTotalWeight, getMaxDimensions } from './standard-product.utils';
 
-// 刊登模块：完整商品详情
+/**
+ * 刊登模块：完整商品详情
+ * 
+ * 此接口用于 GigaCloud 渠道商品详情的返回格式
+ * standardAttributes 字段遵循 StandardProduct 接口的部分字段
+ */
 export interface ChannelProductDetail {
   sku: string;
   title: string;
@@ -11,37 +18,54 @@ export interface ChannelProductDetail {
   price: number;
   stock: number;
   currency: string;
+  /** 标准化属性（遵循 StandardProduct 接口规范） */
   standardAttributes: {
+    // 产品标识
     mpn?: string;
     upc?: string;
     brand?: string;
+    // 外观属性
+    color?: string;
+    colorFamily?: string;
+    material?: string;
+    pattern?: string;
+    style?: string;
+    finish?: string;
+    scene?: string;
+    // 包装尺寸重量（英制单位）
     weight?: number;
     weightUnit?: string;
     length?: number;
     width?: number;
     height?: number;
     lengthUnit?: string;
+    // 包装尺寸重量（公制单位）
+    weightKg?: number;
+    lengthCm?: number;
+    widthCm?: number;
+    heightCm?: number;
+    // 组装后尺寸（产品实际尺寸）
     assembledWeight?: number;
     assembledLength?: number;
     assembledWidth?: number;
     assembledHeight?: number;
+    // 物流
     shippingFee?: number;
+    // 特点
     characteristics?: string[];
+    // 产地
     placeOfOrigin?: string;
+    // 分类
     categoryCode?: string;
     category?: string;
+    // 多包裹标记
+    isMultiPackage?: boolean;
+    packageCount?: number;
   };
+  /** 渠道特有字段 */
   channelSpecificFields: Record<string, any>;
+  /** 原始数据 */
   rawData: Record<string, any>;
-}
-
-// 渠道属性定义
-export interface ChannelAttributeDefinition {
-  key: string;
-  label: string;
-  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
-  path: string;
-  description?: string;
 }
 
 interface GigaCloudConfig {
@@ -342,26 +366,7 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
           price: price?.price ?? 0,
           stock: inventory?.sellerInventoryInfo?.sellerAvailableInventory || 0,
           currency: price?.currency || 'USD',
-          standardAttributes: {
-            mpn: detail.mpn,
-            upc: detail.upc,
-            brand: detail.sellerInfo?.sellerStore,
-            weight: detail.weight,
-            weightUnit: detail.weightUnit,
-            length: detail.length,
-            width: detail.width,
-            height: detail.height,
-            lengthUnit: detail.lengthUnit,
-            assembledWeight: this.parseNumber(detail.assembledWeight),
-            assembledLength: this.parseNumber(detail.assembledLength),
-            assembledWidth: this.parseNumber(detail.assembledWidth),
-            assembledHeight: this.parseNumber(detail.assembledHeight),
-            shippingFee: price?.shippingFee,
-            characteristics: detail.characteristics || [],
-            placeOfOrigin: detail.placeOfOrigin,
-            categoryCode: detail.categoryCode?.toString(),
-            category: detail.category,
-          },
+          standardAttributes: this.buildStandardAttributes(detail, price),
           channelSpecificFields: {
             // GigaCloud 特有字段
             whiteLabel: detail.whiteLabel,
@@ -374,6 +379,7 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
             sellerInfo: detail.sellerInfo,
             toBePublished: detail.toBePublished,
             unAvailablePlatform: detail.unAvailablePlatform,
+            newArrivalFlag: detail.newArrivalFlag,
             firstArrivalDate: detail.firstArrivalDate,
             attributes: detail.attributes, // 渠道自定义属性如 Main Color, Main Material
             customList: detail.customList,
@@ -408,15 +414,30 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
       // 基本信息
       { key: 'mpn', label: 'MPN', type: 'string', path: 'standardAttributes.mpn' },
       { key: 'upc', label: 'UPC', type: 'string', path: 'standardAttributes.upc' },
-      { key: 'brand', label: '品牌/卖家店铺', type: 'string', path: 'standardAttributes.brand' },
+      { key: 'brand', label: '品牌', type: 'string', path: 'standardAttributes.brand' },
       
-      // 尺寸重量
-      { key: 'weight', label: '重量', type: 'number', path: 'standardAttributes.weight' },
+      // 外观属性
+      { key: 'color', label: '颜色', type: 'string', path: 'standardAttributes.color' },
+      { key: 'colorFamily', label: '颜色系列', type: 'string', path: 'standardAttributes.colorFamily' },
+      { key: 'material', label: '材质', type: 'string', path: 'standardAttributes.material' },
+      { key: 'pattern', label: '图案', type: 'string', path: 'standardAttributes.pattern' },
+      { key: 'style', label: '风格', type: 'string', path: 'standardAttributes.style' },
+      { key: 'finish', label: '饰面', type: 'string', path: 'standardAttributes.finish' },
+      { key: 'scene', label: '场景', type: 'string', path: 'standardAttributes.scene' },
+      
+      // 尺寸重量（英制）
+      { key: 'weight', label: '重量(lb)', type: 'number', path: 'standardAttributes.weight' },
       { key: 'weightUnit', label: '重量单位', type: 'string', path: 'standardAttributes.weightUnit' },
-      { key: 'length', label: '长度', type: 'number', path: 'standardAttributes.length' },
-      { key: 'width', label: '宽度', type: 'number', path: 'standardAttributes.width' },
-      { key: 'height', label: '高度', type: 'number', path: 'standardAttributes.height' },
+      { key: 'length', label: '长度(in)', type: 'number', path: 'standardAttributes.length' },
+      { key: 'width', label: '宽度(in)', type: 'number', path: 'standardAttributes.width' },
+      { key: 'height', label: '高度(in)', type: 'number', path: 'standardAttributes.height' },
       { key: 'lengthUnit', label: '长度单位', type: 'string', path: 'standardAttributes.lengthUnit' },
+      
+      // 尺寸重量（公制）
+      { key: 'weightKg', label: '重量(kg)', type: 'number', path: 'standardAttributes.weightKg' },
+      { key: 'lengthCm', label: '长度(cm)', type: 'number', path: 'standardAttributes.lengthCm' },
+      { key: 'widthCm', label: '宽度(cm)', type: 'number', path: 'standardAttributes.widthCm' },
+      { key: 'heightCm', label: '高度(cm)', type: 'number', path: 'standardAttributes.heightCm' },
       
       // 组装后尺寸
       { key: 'assembledWeight', label: '组装后重量', type: 'number', path: 'standardAttributes.assembledWeight' },
@@ -434,19 +455,112 @@ export class GigaCloudAdapter extends BaseChannelAdapter {
       { key: 'whiteLabel', label: '白标', type: 'string', path: 'channelSpecificFields.whiteLabel' },
       { key: 'comboFlag', label: '组合商品', type: 'boolean', path: 'channelSpecificFields.comboFlag' },
       { key: 'overSizeFlag', label: '超大件', type: 'boolean', path: 'channelSpecificFields.overSizeFlag' },
-      { key: 'mainColor', label: '主色', type: 'string', path: 'channelSpecificFields.attributes.Main Color' },
-      { key: 'mainMaterial', label: '主材质', type: 'string', path: 'channelSpecificFields.attributes.Main Material' },
+      { key: 'customized', label: '定制商品', type: 'string', path: 'channelSpecificFields.customized' },
+      { key: 'lithiumBatteryContained', label: '含锂电池', type: 'string', path: 'channelSpecificFields.lithiumBatteryContained' },
       { key: 'sellerStore', label: '卖家店铺', type: 'string', path: 'channelSpecificFields.sellerInfo.sellerStore' },
       { key: 'sellerType', label: '卖家类型', type: 'string', path: 'channelSpecificFields.sellerInfo.sellerType' },
+      { key: 'newArrivalFlag', label: '新品标记', type: 'boolean', path: 'channelSpecificFields.newArrivalFlag' },
+      { key: 'toBePublished', label: '待发布', type: 'boolean', path: 'channelSpecificFields.toBePublished' },
     ];
   }
 
-  private parseNumber(value: any): number | undefined {
-    if (value === 'Not Applicable' || value === null || value === undefined) {
-      return undefined;
+  /**
+   * 构建标准化属性，处理多包裹商品的尺寸重量
+   * 遵循 StandardProduct 接口规范
+   */
+  private buildStandardAttributes(detail: any, price: any): Record<string, any> {
+    let weight = detail.weight;
+    let length = detail.length;
+    let width = detail.width;
+    let height = detail.height;
+    const weightUnit = detail.weightUnit || 'lb';
+    const lengthUnit = detail.lengthUnit || 'in';
+
+    // 如果是多包裹商品（comboFlag=true）且主商品尺寸为空，从 comboInfo 计算
+    if (detail.comboFlag && detail.comboInfo?.length > 0) {
+      const packages = detail.comboInfo;
+      
+      // 计算总重量（使用工具函数）
+      if (weight == null) {
+        const totalWeight = calculateTotalWeight(packages);
+        weight = totalWeight > 0 ? totalWeight : null;
+      }
+
+      // 取最大尺寸（使用工具函数）
+      if (length == null || width == null || height == null) {
+        const { maxLength, maxWidth, maxHeight } = getMaxDimensions(packages);
+        if (length == null && maxLength > 0) length = maxLength;
+        if (width == null && maxWidth > 0) width = maxWidth;
+        if (height == null && maxHeight > 0) height = maxHeight;
+      }
     }
-    const num = parseFloat(value);
-    return isNaN(num) ? undefined : num;
+
+    // 从 attributes 中提取外观属性
+    const attrs = detail.attributes || {};
+    const color = attrs['Main Color'] || attrs['Color'] || attrs.color || null;
+    const material = attrs['Main Material'] || attrs['Material'] || attrs.material || null;
+    const style = attrs['Style'] || attrs.style || null;
+    const pattern = attrs['Pattern'] || attrs.pattern || null;
+    const finish = attrs['Finish'] || attrs.finish || null;
+    const scene = attrs['Scene'] || attrs.scene || null;
+
+    return {
+      // 产品标识
+      mpn: detail.mpn,
+      upc: detail.upc,
+      // 品牌：优先从 attributes 中查找，否则留空（不使用商家名称）
+      brand: attrs.Brand || attrs.brand || detail.brand || null,
+      
+      // 外观属性
+      color,
+      colorFamily: attrs['Color Family'] || attrs.colorFamily || null,
+      material,
+      pattern,
+      style,
+      finish,
+      scene, // 场景/适用场所
+      
+      // 包装尺寸重量（英制单位）
+      weight,
+      weightUnit,
+      length,
+      width,
+      height,
+      lengthUnit,
+      
+      // 包装尺寸重量（公制单位，API 直接返回）
+      weightKg: parseNumber(detail.weightKg),
+      lengthCm: parseNumber(detail.lengthCm),
+      widthCm: parseNumber(detail.widthCm),
+      heightCm: parseNumber(detail.heightCm),
+      
+      // 组装后尺寸（产品实际尺寸）
+      assembledWeight: parseNumber(detail.assembledWeight),
+      assembledLength: parseNumber(detail.assembledLength),
+      assembledWidth: parseNumber(detail.assembledWidth),
+      assembledHeight: parseNumber(detail.assembledHeight),
+      
+      // 价格（用于计算售价）
+      price: price?.price,  // 原价
+      salePrice: price?.discountedPrice,  // 优惠价
+      
+      // 物流
+      shippingFee: price?.shippingFee,
+      
+      // 特点
+      characteristics: detail.characteristics || [],
+      
+      // 产地
+      placeOfOrigin: detail.placeOfOrigin,
+      
+      // 分类
+      categoryCode: detail.categoryCode?.toString(),
+      category: detail.category,
+      
+      // 多包裹标记
+      isMultiPackage: detail.comboFlag && detail.comboInfo?.length > 0,
+      packageCount: detail.comboInfo?.length || 1,
+    };
   }
 
   private chunkArray<T>(array: T[], size: number): T[][] {

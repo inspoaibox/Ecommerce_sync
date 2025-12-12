@@ -15,6 +15,11 @@ import { QueuesModule } from './queues/queues.module';
 import { ListingModule } from './modules/listing/listing.module';
 import { PlatformCategoryModule } from './modules/platform-category/platform-category.module';
 import { UpcModule } from './modules/upc/upc.module';
+import { ProductPoolModule } from './modules/product-pool/product-pool.module';
+import { AiModule } from './modules/ai/ai.module';
+import { AttributeMappingModule } from './modules/attribute-mapping/attribute-mapping.module';
+import { ImageModule } from './modules/image/image.module';
+import { UnavailablePlatformModule } from './modules/unavailable-platform/unavailable-platform.module';
 
 @Module({
   imports: [
@@ -40,6 +45,11 @@ import { UpcModule } from './modules/upc/upc.module';
     ListingModule,
     PlatformCategoryModule,
     UpcModule,
+    ProductPoolModule,
+    AiModule,
+    AttributeMappingModule,
+    ImageModule,
+    UnavailablePlatformModule,
   ],
 })
 export class AppModule {}

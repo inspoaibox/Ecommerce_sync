@@ -1,0 +1,25 @@
+: [
+                                    "Furniture Legs"
+                                ]
+                            },
+                            {
+                                "$schema": "http://json-schema.org/draft-07/schema#",
+                                "type": "object",
+                                "required": [
+                                    "Handheld Pinball Games"
+                                ]
+                            },
+                            {
+                                "$schema": "http://json-schema.org/draft-07/schema#",
+                                "type": "object",
+                                "required": [
+                                    "Guitar Replacement Parts"
+                                ]
+                            },
+                            {
+                                "$schema": "http://json-schema.org/draft-07/schema#",
+                                "type": "object",
+                                "required": [
+                                    "Coatings & Batters"
+                                ]
+                            }

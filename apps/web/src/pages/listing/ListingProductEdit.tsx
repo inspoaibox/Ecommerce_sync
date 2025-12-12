@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Modal, Form, Input, InputNumber, Select, Tabs, Space, Button, message, Image, Spin } from 'antd';
-import { listingApi, platformCategoryApi } from '@/services/api';
+import { Modal, Form, Input, InputNumber, Select, Tabs, Space, Button, message, Image, Spin, Card, Alert } from 'antd';
+import { RobotOutlined } from '@ant-design/icons';
+import { listingApi, platformCategoryApi, aiModelApi, aiOptimizeApi } from '@/services/api';
 
 const { TextArea } = Input;
 
@@ -18,6 +19,14 @@ export default function ListingProductEdit({ visible, productId, onClose, onSucc
   const [product, setProduct] = useState<any>(null);
   const [categories, setCategories] = useState<any[]>([]);
   const [searchingCat, setSearchingCat] = useState(false);
+
+  // AI 优化
+  const [aiOptimizeModal, setAiOptimizeModal] = useState(false);
+  const [aiModels, setAiModels] = useState<any[]>([]);
+  const [selectedAiModel, setSelectedAiModel] = useState<string>('');
+  const [selectedFields, setSelectedFields] = useState<('title' | 'description' | 'bulletPoints' | 'keywords')[]>(['title']);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeResults, setOptimizeResults] = useState<any[]>([]);
 
   useEffect(() => {
     if (visible && productId) {
@@ -80,6 +89,61 @@ export default function ListingProductEdit({ visible, productId, onClose, onSucc
     }
   };
 
+  // AI 优化相关
+  const loadAiConfig = async () => {
+    try {
+      const modelsRes: any = await aiModelApi.list();
+      setAiModels(modelsRes.filter((m: any) => m.status === 'active'));
+      const defaultModel = modelsRes.find((m: any) => m.isDefault && m.status === 'active');
+      if (defaultModel) setSelectedAiModel(defaultModel.id);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleOpenAiOptimize = async () => {
+    setOptimizeResults([]);
+    await loadAiConfig();
+    setAiOptimizeModal(true);
+  };
+
+  const handleAiOptimize = async () => {
+    if (!productId || !selectedAiModel || selectedFields.length === 0) {
+      message.warning('请选择模型和优化字段');
+      return;
+    }
+    setOptimizing(true);
+    try {
+      const res: any = await aiOptimizeApi.optimize({
+        productId,
+        productType: 'listing',
+        fields: selectedFields,
+        modelId: selectedAiModel,
+      });
+      setOptimizeResults(res.results || []);
+      message.success('优化完成');
+    } catch (e: any) {
+      message.error(e.message || '优化失败');
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  const handleApplyAiResult = async () => {
+    if (optimizeResults.length === 0) return;
+    try {
+      const logIds = optimizeResults.map((r: any) => r.logId).filter(Boolean);
+      if (logIds.length > 0) {
+        await aiOptimizeApi.apply(logIds);
+        message.success('已应用优化结果');
+        setAiOptimizeModal(false);
+        loadProduct(); // 重新加载商品数据
+      }
+    } catch (e: any) {
+      message.error(e.message || '应用失败');
+    }
+  };
+
   return (
     <Modal
       title="编辑商品"
@@ -89,6 +153,9 @@ export default function ListingProductEdit({ visible, productId, onClose, onSucc
       footer={
         <Space>
           <Button onClick={onClose}>取消</Button>
+          <Button icon={<RobotOutlined />} onClick={handleOpenAiOptimize}>
+            AI 优化
+          </Button>
           <Button type="primary" onClick={handleSave} loading={saving}>
             保存
           </Button>
@@ -207,6 +274,82 @@ export default function ListingProductEdit({ visible, productId, onClose, onSucc
           ]}
         />
       </Spin>
+
+      {/* AI 优化弹窗 */}
+      <Modal
+        title="AI 优化"
+        open={aiOptimizeModal}
+        onCancel={() => { setAiOptimizeModal(false); setOptimizeResults([]); }}
+        width={700}
+        footer={
+          <Space>
+            <Button onClick={() => { setAiOptimizeModal(false); setOptimizeResults([]); }}>取消</Button>
+            {optimizeResults.length > 0 ? (
+              <Button type="primary" onClick={handleApplyAiResult}>应用优化结果</Button>
+            ) : (
+              <Button type="primary" onClick={handleAiOptimize} loading={optimizing} icon={<RobotOutlined />}>
+                开始优化
+              </Button>
+            )}
+          </Space>
+        }
+      >
+        {optimizeResults.length === 0 ? (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ marginBottom: 8, fontWeight: 500 }}>AI 模型</div>
+              <Select
+                placeholder="选择 AI 模型"
+                style={{ width: '100%' }}
+                value={selectedAiModel || undefined}
+                onChange={setSelectedAiModel}
+                options={aiModels.map(m => ({ value: m.id, label: `${m.name} (${m.modelName})` }))}
+              />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ marginBottom: 8, fontWeight: 500 }}>优化字段</div>
+              <Select
+                mode="multiple"
+                placeholder="选择要优化的字段"
+                style={{ width: '100%' }}
+                value={selectedFields}
+                onChange={setSelectedFields}
+                options={[
+                  { value: 'title', label: '标题' },
+                  { value: 'description', label: '描述' },
+                  { value: 'bulletPoints', label: '五点描述' },
+                ]}
+              />
+            </div>
+            <Alert
+              message="优化说明"
+              description="AI 将根据商品信息自动优化选中的字段，优化完成后可预览并选择是否应用。"
+              type="info"
+              showIcon
+            />
+          </div>
+        ) : (
+          <div>
+            <Alert message="优化完成！请查看结果并决定是否应用。" type="success" showIcon style={{ marginBottom: 16 }} />
+            {optimizeResults.map((result: any, index: number) => (
+              <Card key={index} size="small" title={`${result.field === 'title' ? '标题' : result.field === 'description' ? '描述' : '五点描述'}`} style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ color: '#666', fontSize: 12 }}>原始内容：</div>
+                  <div style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, maxHeight: 100, overflow: 'auto' }}>
+                    {Array.isArray(result.original) ? result.original.join('\n') : result.original || '(空)'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: '#1890ff', fontSize: 12 }}>优化结果：</div>
+                  <div style={{ background: '#e6f7ff', padding: 8, borderRadius: 4, maxHeight: 150, overflow: 'auto' }}>
+                    {Array.isArray(result.optimized) ? result.optimized.join('\n') : result.optimized || '(空)'}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Modal>
     </Modal>
   );
 }

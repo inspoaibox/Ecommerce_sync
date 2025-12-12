@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
+import * as express from 'express';
+import * as path from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -12,6 +14,9 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+  
+  // 静态文件服务 - 处理后的图片
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   const config = new DocumentBuilder()
     .setTitle('E-Commerce Sync API')

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card, Table, Button, Space, Select, Input, Tag, message, Modal, Image, Descriptions } from 'antd';
-import { ReloadOutlined, DeleteOutlined, EyeOutlined, EditOutlined } from '@ant-design/icons';
-import { listingApi, shopApi, channelApi } from '@/services/api';
+import { Card, Table, Button, Space, Select, Input, Tag, message, Modal, Image, Descriptions, Progress, Alert } from 'antd';
+import { ReloadOutlined, DeleteOutlined, EyeOutlined, EditOutlined, RobotOutlined } from '@ant-design/icons';
+import { listingApi, shopApi, channelApi, aiModelApi, aiOptimizeApi } from '@/services/api';
 import dayjs from 'dayjs';
 import ListingProductEdit from './ListingProductEdit';
 
@@ -26,6 +26,15 @@ export default function ListingProducts() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [editModal, setEditModal] = useState(false);
   const [editProductId, setEditProductId] = useState<string | null>(null);
+
+  // 批量 AI 优化
+  const [batchAiModal, setBatchAiModal] = useState(false);
+  const [aiModels, setAiModels] = useState<any[]>([]);
+  const [selectedAiModel, setSelectedAiModel] = useState<string>('');
+  const [selectedFields, setSelectedFields] = useState<('title' | 'description' | 'bulletPoints' | 'keywords')[]>(['title']);
+  const [batchOptimizing, setBatchOptimizing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
+  const [batchResults, setBatchResults] = useState<any[]>([]);
 
   useEffect(() => {
     loadShopsAndChannels();
@@ -92,6 +101,81 @@ export default function ListingProducts() {
     setEditModal(true);
   };
 
+  // 批量 AI 优化相关
+  const loadAiModels = async () => {
+    try {
+      const res: any = await aiModelApi.list();
+      const activeModels = res.filter((m: any) => m.status === 'active');
+      setAiModels(activeModels);
+      const defaultModel = activeModels.find((m: any) => m.isDefault);
+      if (defaultModel) setSelectedAiModel(defaultModel.id);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleOpenBatchAi = async () => {
+    if (selectedRows.length === 0) {
+      message.warning('请先选择要优化的商品');
+      return;
+    }
+    setBatchResults([]);
+    setBatchProgress({ current: 0, total: 0, success: 0, failed: 0 });
+    await loadAiModels();
+    setBatchAiModal(true);
+  };
+
+  const handleBatchAiOptimize = async () => {
+    if (!selectedAiModel || selectedFields.length === 0) {
+      message.warning('请选择模型和优化字段');
+      return;
+    }
+
+    setBatchOptimizing(true);
+    setBatchProgress({ current: 0, total: selectedRows.length, success: 0, failed: 0 });
+
+    try {
+      const res: any = await aiOptimizeApi.batchOptimize({
+        products: selectedRows.map(r => ({ id: r.id, type: 'listing' as const })),
+        fields: selectedFields,
+        modelId: selectedAiModel,
+      });
+
+      setBatchResults(res.results || []);
+      setBatchProgress({
+        current: res.total,
+        total: res.total,
+        success: res.success,
+        failed: res.failed,
+      });
+      message.success(`批量优化完成：成功 ${res.success}，失败 ${res.failed}`);
+    } catch (e: any) {
+      message.error(e.message || '批量优化失败');
+    } finally {
+      setBatchOptimizing(false);
+    }
+  };
+
+  const handleApplyBatchResults = async () => {
+    const successResults = batchResults.filter(r => r.status === 'success');
+    const logIds = successResults.flatMap(r => r.results?.map((res: any) => res.logId) || []).filter(Boolean);
+
+    if (logIds.length === 0) {
+      message.warning('没有可应用的优化结果');
+      return;
+    }
+
+    try {
+      await aiOptimizeApi.apply(logIds);
+      message.success('已应用所有优化结果');
+      setBatchAiModal(false);
+      setSelectedRows([]);
+      loadProducts();
+    } catch (e: any) {
+      message.error(e.message || '应用失败');
+    }
+  };
+
   const columns = [
     {
       title: '图片',
@@ -101,7 +185,49 @@ export default function ListingProducts() {
     },
     { title: 'SKU', dataIndex: 'sku', width: 120 },
     { title: '标题', dataIndex: 'title', width: 200, ellipsis: true },
-    { title: '价格', dataIndex: 'price', width: 80, render: (v: number) => `$${Number(v)?.toFixed(2) || '-'}` },
+    { title: '价格', dataIndex: 'price', width: 80, render: (v: number) => v != null ? `$${Number(v).toFixed(2)}` : '-' },
+    {
+      title: '运费',
+      width: 80,
+      render: (_: any, record: any) => {
+        const shippingFee = record.channelAttributes?.shippingFee;
+        return shippingFee != null ? `$${Number(shippingFee).toFixed(2)}` : '-';
+      },
+    },
+    {
+      title: '优惠价格',
+      width: 90,
+      render: (_: any, record: any) => {
+        const salePrice = record.channelAttributes?.salePrice;
+        return salePrice != null ? `$${Number(salePrice).toFixed(2)}` : '-';
+      },
+    },
+    {
+      title: '总价',
+      width: 80,
+      render: (_: any, record: any) => {
+        const price = record.price;
+        const shippingFee = record.channelAttributes?.shippingFee || 0;
+        return price != null ? `$${(Number(price) + Number(shippingFee)).toFixed(2)}` : '-';
+      },
+    },
+    {
+      title: '优惠总价',
+      width: 90,
+      render: (_: any, record: any) => {
+        const salePrice = record.channelAttributes?.salePrice;
+        const shippingFee = record.channelAttributes?.shippingFee || 0;
+        return salePrice != null ? `$${(Number(salePrice) + Number(shippingFee)).toFixed(2)}` : '-';
+      },
+    },
+    {
+      title: '平台价格',
+      width: 90,
+      render: (_: any, record: any) => {
+        const platformPrice = record.platformAttributes?.price;
+        return platformPrice != null ? `$${Number(platformPrice).toFixed(2)}` : '-';
+      },
+    },
     { title: '库存', dataIndex: 'stock', width: 70 },
     {
       title: '店铺',
@@ -150,16 +276,21 @@ export default function ListingProducts() {
   return (
     <div>
       <Card
-        title="刊登商品管理"
+        title="商品管理"
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={loadProducts} loading={loading}>
               刷新
             </Button>
             {selectedRows.length > 0 && (
-              <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(selectedRows.map(r => r.id))}>
-                批量删除 ({selectedRows.length})
-              </Button>
+              <>
+                <Button icon={<RobotOutlined />} onClick={handleOpenBatchAi}>
+                  批量 AI 优化 ({selectedRows.length})
+                </Button>
+                <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(selectedRows.map(r => r.id))}>
+                  批量删除 ({selectedRows.length})
+                </Button>
+              </>
             )}
           </Space>
         }
@@ -203,7 +334,7 @@ export default function ListingProducts() {
           rowKey="id"
           loading={loading}
           size="small"
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1650 }}
           rowSelection={{
             selectedRowKeys: selectedRows.map(r => r.id),
             onChange: (_, rows) => setSelectedRows(rows),
@@ -222,24 +353,43 @@ export default function ListingProducts() {
         open={detailModal}
         onCancel={() => setDetailModal(false)}
         footer={null}
-        width={800}
+        width={950}
       >
         {selectedProduct && (
           <div>
-            <Descriptions bordered column={2} size="small">
+            <Descriptions bordered column={3} size="small" labelStyle={{ width: 80, whiteSpace: 'nowrap' }}>
               <Descriptions.Item label="SKU">{selectedProduct.sku}</Descriptions.Item>
               <Descriptions.Item label="状态">
                 <Tag color={STATUS_MAP[selectedProduct.listingStatus]?.color}>
                   {STATUS_MAP[selectedProduct.listingStatus]?.text}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="标题" span={2}>{selectedProduct.title}</Descriptions.Item>
+              <Descriptions.Item label="标题" span={3}>{selectedProduct.title}</Descriptions.Item>
               <Descriptions.Item label="价格">${Number(selectedProduct.price)?.toFixed(2)}</Descriptions.Item>
+              <Descriptions.Item label="运费">${Number(selectedProduct.channelAttributes?.shippingFee || 0).toFixed(2)}</Descriptions.Item>
+              <Descriptions.Item label="优惠价格">
+                {selectedProduct.channelAttributes?.salePrice != null 
+                  ? `$${Number(selectedProduct.channelAttributes.salePrice).toFixed(2)}` 
+                  : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="总价">
+                ${(Number(selectedProduct.price || 0) + Number(selectedProduct.channelAttributes?.shippingFee || 0)).toFixed(2)}
+              </Descriptions.Item>
+              <Descriptions.Item label="优惠总价">
+                {selectedProduct.channelAttributes?.salePrice != null 
+                  ? `$${(Number(selectedProduct.channelAttributes.salePrice) + Number(selectedProduct.channelAttributes?.shippingFee || 0)).toFixed(2)}` 
+                  : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="平台价格">
+                {selectedProduct.platformAttributes?.price != null 
+                  ? `$${Number(selectedProduct.platformAttributes.price).toFixed(2)}` 
+                  : '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="库存">{selectedProduct.stock}</Descriptions.Item>
               <Descriptions.Item label="店铺">{selectedProduct.shop?.name}</Descriptions.Item>
               <Descriptions.Item label="渠道">{selectedProduct.channel?.name}</Descriptions.Item>
               {selectedProduct.description && (
-                <Descriptions.Item label="描述" span={2}>
+                <Descriptions.Item label="描述" span={3}>
                   <div style={{ maxHeight: 100, overflow: 'auto' }}>{selectedProduct.description}</div>
                 </Descriptions.Item>
               )}
@@ -282,6 +432,123 @@ export default function ListingProducts() {
         }}
         onSuccess={loadProducts}
       />
+
+      {/* 批量 AI 优化弹窗 */}
+      <Modal
+        title="批量 AI 优化"
+        open={batchAiModal}
+        onCancel={() => {
+          if (!batchOptimizing) {
+            setBatchAiModal(false);
+            setBatchResults([]);
+          }
+        }}
+        width={600}
+        footer={
+          <Space>
+            <Button onClick={() => setBatchAiModal(false)} disabled={batchOptimizing}>
+              取消
+            </Button>
+            {batchResults.length > 0 ? (
+              <Button type="primary" onClick={handleApplyBatchResults}>
+                应用所有结果
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                onClick={handleBatchAiOptimize}
+                loading={batchOptimizing}
+                icon={<RobotOutlined />}
+              >
+                开始优化
+              </Button>
+            )}
+          </Space>
+        }
+      >
+        {batchResults.length === 0 ? (
+          <div>
+            <Alert
+              message={`已选择 ${selectedRows.length} 个商品进行批量优化`}
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ marginBottom: 8, fontWeight: 500 }}>AI 模型</div>
+              <Select
+                placeholder="选择 AI 模型"
+                style={{ width: '100%' }}
+                value={selectedAiModel || undefined}
+                onChange={setSelectedAiModel}
+                options={aiModels.map(m => ({ value: m.id, label: `${m.name} (${m.modelName})` }))}
+                disabled={batchOptimizing}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ marginBottom: 8, fontWeight: 500 }}>优化字段</div>
+              <Select
+                mode="multiple"
+                placeholder="选择要优化的字段"
+                style={{ width: '100%' }}
+                value={selectedFields}
+                onChange={setSelectedFields}
+                options={[
+                  { value: 'title', label: '标题' },
+                  { value: 'description', label: '描述' },
+                  { value: 'bulletPoints', label: '五点描述' },
+                ]}
+                disabled={batchOptimizing}
+              />
+            </div>
+
+            {batchOptimizing && (
+              <div style={{ marginTop: 16 }}>
+                <Progress
+                  percent={Math.round((batchProgress.current / batchProgress.total) * 100)}
+                  status="active"
+                />
+                <div style={{ textAlign: 'center', marginTop: 8, color: '#666' }}>
+                  正在处理 {batchProgress.current}/{batchProgress.total}...
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            <Alert
+              message={`优化完成：成功 ${batchProgress.success}，失败 ${batchProgress.failed}`}
+              type={batchProgress.failed > 0 ? 'warning' : 'success'}
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+            <div style={{ maxHeight: 300, overflow: 'auto' }}>
+              {batchResults.map((result, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: 8,
+                    marginBottom: 8,
+                    background: result.status === 'success' ? '#f6ffed' : '#fff2f0',
+                    borderRadius: 4,
+                    border: `1px solid ${result.status === 'success' ? '#b7eb8f' : '#ffccc7'}`,
+                  }}
+                >
+                  <div style={{ fontWeight: 500 }}>
+                    {selectedRows.find(r => r.id === result.productId)?.sku || result.productId}
+                  </div>
+                  <Tag color={result.status === 'success' ? 'success' : 'error'}>
+                    {result.status === 'success' ? '成功' : '失败'}
+                  </Tag>
+                  {result.error && <span style={{ color: '#ff4d4f', marginLeft: 8 }}>{result.error}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
