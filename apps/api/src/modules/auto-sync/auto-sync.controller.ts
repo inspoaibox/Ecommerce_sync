@@ -1,12 +1,16 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AutoSyncService } from './auto-sync.service';
+import { AutoSyncSchedulerService } from './auto-sync-scheduler.service';
 import { PaginationDto } from '@/common/dto/pagination.dto';
 
 @ApiTags('自动同步')
 @Controller('auto-sync')
 export class AutoSyncController {
-  constructor(private readonly autoSyncService: AutoSyncService) {}
+  constructor(
+    private readonly autoSyncService: AutoSyncService,
+    private readonly schedulerService: AutoSyncSchedulerService,
+  ) {}
 
   @Get('configs')
   @ApiOperation({ summary: '获取所有自动同步配置' })
@@ -78,5 +82,11 @@ export class AutoSyncController {
   @ApiOperation({ summary: '删除任务' })
   deleteTask(@Param('taskId') taskId: string) {
     return this.autoSyncService.deleteTask(taskId);
+  }
+
+  @Post('check-scheduled')
+  @ApiOperation({ summary: '手动检查定时任务（测试用）' })
+  checkScheduled() {
+    return this.schedulerService.manualCheck();
   }
 }
