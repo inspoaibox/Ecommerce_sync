@@ -1544,19 +1544,50 @@ export class WalmartAdapter extends BasePlatformAdapter {
    * 或者平铺格式（向后兼容）:
    * { sku, productName, price, ... }
    */
-  async createItem(item: Record<string, any>): Promise<{ feedId: string; walmartResponse?: any; submittedFeedData?: any }> {
+  /**
+   * 创建商品（使用 Feed API）
+   * 
+   * US 市场: MP_ITEM Feed，V5.0 格式
+   * CA/国际市场: MP_ITEM_INTL Feed，V3.16 格式，需要额外的 Header 字段
+   * 
+   * @param item 商品数据（已转换为 Walmart 格式）
+   * @param subCategory 类目ID（CA 市场需要在 Header 中指定）
+   */
+  async createItem(item: Record<string, any>, subCategory?: string): Promise<{ feedId: string; walmartResponse?: any; submittedFeedData?: any }> {
     try {
       const headers = await this.getHeaders();
+      const isInternational = this.regionConfig.region !== 'US';
 
-      // 构建 MP_ITEM Feed 数据 - V5.0 格式（使用区域配置）
-      // 参考 woo-walmart-sync 插件的实现
-      const feedData = {
-        MPItemFeedHeader: {
-          businessUnit: this.regionConfig.businessUnit,  // V5.0 必需字段，根据区域配置
+      // 构建 Feed Header
+      let feedHeader: Record<string, any>;
+      
+      if (isInternational) {
+        // CA/国际市场: MP_ITEM_INTL Feed Header
+        // 参考 CA_MP_ITEM_INTL_SPEC.json
+        feedHeader = {
+          version: this.regionConfig.specVersion,  // "3.16"
+          processMode: 'REPLACE',
+          subset: 'EXTERNAL',
+          mart: this.regionConfig.businessUnit,    // "WALMART_CA"
+          sellingChannel: 'marketplace',
+          locale: ['en', 'fr'],  // CA 市场需要双语
+        };
+        // 如果提供了 subCategory，添加到 Header
+        if (subCategory) {
+          feedHeader.subCategory = subCategory;
+        }
+      } else {
+        // US 市场: MP_ITEM Feed Header (V5.0)
+        feedHeader = {
+          businessUnit: this.regionConfig.businessUnit,
           locale: this.regionConfig.locale,
-          version: this.regionConfig.specVersion,  // V5.0 完整版本号
-        },
-        MPItem: [item],  // 直接使用传入的数据，所有字段由类目属性映射配置决定
+          version: this.regionConfig.specVersion,
+        };
+      }
+
+      const feedData = {
+        MPItemFeedHeader: feedHeader,
+        MPItem: [item],
       };
 
       const FormData = require('form-data');
@@ -1577,8 +1608,8 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
       return { 
         feedId: response.data.feedId,
-        walmartResponse: response.data,  // 返回完整的 Walmart 响应
-        submittedFeedData: feedData,     // 返回实际提交的 Feed 数据
+        walmartResponse: response.data,
+        submittedFeedData: feedData,
       };
     } catch (error: any) {
       const errMsg = error.response?.data?.error?.[0]?.description || error.message;

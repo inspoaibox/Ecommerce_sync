@@ -55,7 +55,7 @@ export type ProductType = 'oversized' | 'small' | 'normal' | 'multiPackage';
 /**
  * 标准化商品数据结构
  * 
- * 核心字段列表（共29个基础字段）：
+ * 核心字段列表（共31个基础字段）：
  * 
  * 【基础信息】
  * 1. title - 商品标题
@@ -67,41 +67,43 @@ export type ProductType = 'oversized' | 'small' | 'normal' | 'multiPackage';
  * 7. keywords - 搜索关键词
  * 
  * 【价格信息】
- * 7. price - 商品价格
- * 8. salePrice - 优惠价格
- * 9. shippingFee - 运费价格
- * 10. totalPrice - 商品总价（计算字段：price + shippingFee）
- * 11. saleTotalPrice - 优惠总价（计算字段：salePrice + shippingFee）
- * 12. platformPrice - 平台总价（刊登售价）
- * 13. currency - 货币
+ * 8. price - 商品价格
+ * 9. salePrice - 优惠价格
+ * 10. shippingFee - 运费价格
+ * 11. totalPrice - 商品总价（计算字段：price + shippingFee）
+ * 12. saleTotalPrice - 优惠总价（计算字段：salePrice + shippingFee）
+ * 13. platformPrice - 平台总价（刊登售价）
+ * 14. currency - 货币
  * 
  * 【库存】
- * 14. stock - 库存数量
+ * 15. stock - 库存数量
  * 
  * 【图片】
- * 15. mainImageUrl - 主图
- * 16. imageUrls - 商品产品图
+ * 16. mainImageUrl - 主图
+ * 17. imageUrls - 商品产品图
  * 
  * 【产品尺寸】
- * 17. productLength - 商品长度
- * 18. productWidth - 商品宽度
- * 19. productHeight - 商品高度
- * 20. productWeight - 商品重量
+ * 18. productLength - 商品长度
+ * 19. productWidth - 商品宽度
+ * 20. productHeight - 商品高度
+ * 21. productWeight - 商品重量
  * 
  * 【包装尺寸】
- * 21. packageLength - 商品包裹长度
- * 22. packageWidth - 商品包裹宽度
- * 23. packageHeight - 商品包裹高度
- * 24. packageWeight - 商品包裹重量
- * 25. packages - 多包裹信息（自动延伸）
+ * 22. packageLength - 商品包裹长度
+ * 23. packageWidth - 商品包裹宽度
+ * 24. packageHeight - 商品包裹高度
+ * 25. packageWeight - 商品包裹重量
+ * 26. packages - 多包裹信息（自动延伸）
  * 
  * 【其他】
- * 26. placeOfOrigin - 商品产地
- * 27. productType - 商品性质
- * 28. supplier - 供货商家
+ * 27. placeOfOrigin - 商品产地
+ * 28. productType - 商品性质
+ * 29. supplier - 供货商家
+ * 30. productDescription - 产品说明
+ * 31. productCertification - 产品资质
  * 
  * 【扩展】
- * 29. customAttributes - 渠道属性（所有其他属性）
+ * 32. customAttributes - 渠道属性（所有其他属性）
  */
 export interface StandardProduct {
   // ==================== 基础信息（7个）====================
@@ -171,17 +173,21 @@ export interface StandardProduct {
   /** 25. 多包裹信息（如果是多包裹商品，自动延伸） */
   packages?: PackageInfo[];
 
-  // ==================== 其他核心字段（3个）====================
+  // ==================== 其他核心字段（5个）====================
   /** 26. 商品产地 */
   placeOfOrigin?: string;
   /** 27. 商品性质：超大件/轻小件/普通件/多包裹 */
   productType?: ProductType;
   /** 28. 供货商家 */
   supplier?: string;
+  /** 29. 产品说明（详细的产品使用说明、安装指南等） */
+  productDescription?: string;
+  /** 30. 产品资质（认证信息、合规证书等） */
+  productCertification?: string;
   
   // ==================== 渠道属性（扩展字段）====================
   /** 
-   * 29. 渠道属性（自定义属性）
+   * 31. 渠道属性（自定义属性）
    * 所有非核心字段统一放入此处
    * 类似 WooCommerce 的自定义属性
    */
@@ -280,10 +286,12 @@ export const STANDARD_FIELD_PATHS = {
   PACKAGE_WEIGHT: 'packageWeight',
   PACKAGES: 'packages',
 
-  // 其他（3个）
+  // 其他（5个）
   PLACE_OF_ORIGIN: 'placeOfOrigin',
   PRODUCT_TYPE: 'productType',
   SUPPLIER: 'supplier',
+  PRODUCT_DESCRIPTION: 'productDescription',
+  PRODUCT_CERTIFICATION: 'productCertification',
   
   // 扩展
   CUSTOM_ATTRIBUTES: 'customAttributes',

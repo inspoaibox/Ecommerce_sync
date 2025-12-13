@@ -393,6 +393,16 @@ export default function ListingProducts() {
                   <div style={{ maxHeight: 100, overflow: 'auto' }}>{selectedProduct.description}</div>
                 </Descriptions.Item>
               )}
+              {selectedProduct.channelAttributes?.productDescription && (
+                <Descriptions.Item label="产品说明" span={3}>
+                  <div style={{ maxHeight: 100, overflow: 'auto' }}>{selectedProduct.channelAttributes.productDescription}</div>
+                </Descriptions.Item>
+              )}
+              {selectedProduct.channelAttributes?.productCertification && (
+                <Descriptions.Item label="产品资质" span={3}>
+                  <div style={{ maxHeight: 100, overflow: 'auto' }}>{selectedProduct.channelAttributes.productCertification}</div>
+                </Descriptions.Item>
+              )}
             </Descriptions>
 
             {selectedProduct.imageUrls?.length > 0 && (

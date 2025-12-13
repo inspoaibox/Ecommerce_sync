@@ -611,6 +611,135 @@ export const WALMART_DEFAULT_MAPPING_RULES: DefaultMappingConfig[] = [
     },
   },
 
+  // ==================== 表面处理 ====================
+  {
+    attributeId: 'finish',
+    attributeName: 'Finish',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'finish_extract',
+      param: 'New',
+    },
+  },
+
+  // ==================== 性别 ====================
+  {
+    attributeId: 'gender',
+    attributeName: 'Gender',
+    mappingType: 'enum_select',
+    value: 'Unisex',
+  },
+
+  // ==================== 温度敏感 ====================
+  {
+    attributeId: 'isTemperatureSensitive',
+    attributeName: 'Is Temperature-Sensitive',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_temperature_sensitive_extract',
+      param: 'No',
+    },
+  },
+
+  // ==================== 产品尺寸 ====================
+  {
+    attributeId: 'size',
+    attributeName: 'Size',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'size_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 床尺寸 ====================
+  {
+    attributeId: 'bedSize',
+    attributeName: 'Bed Size',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'bed_size_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 抽屉数量 ====================
+  {
+    attributeId: 'numberOfDrawers',
+    attributeName: 'Number of Drawers',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'number_of_drawers_extract',
+      param: '0',
+    },
+  },
+
+  // ==================== 搁板数量 ====================
+  {
+    attributeId: 'numberOfShelves',
+    attributeName: 'Number of Shelves',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'number_of_shelves_extract',
+      param: '0',
+    },
+  },
+
+  // ==================== 主题 ====================
+  {
+    attributeId: 'theme',
+    attributeName: 'Theme',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'theme_extract',
+      param: 'Casual Home Comfort Setting',
+    },
+  },
+
+  // ==================== 形状 ====================
+  {
+    attributeId: 'shape',
+    attributeName: 'Shape',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'shape_extract',
+      param: 'Rectangular',
+    },
+  },
+
+  // ==================== 直径 ====================
+  {
+    attributeId: 'diameter',
+    attributeName: 'Diameter',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'diameter_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 床风格 ====================
+  {
+    attributeId: 'bedStyle',
+    attributeName: 'Bed Style',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'bed_style_extract',
+      param: 'Platform Bed Style',
+    },
+  },
+
+  // ==================== 安装类型 ====================
+  {
+    attributeId: 'mountType',
+    attributeName: 'Mount Type',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'mount_type_extract',
+      param: 'Freestanding',
+    },
+  },
+
   // ==================== 税码（加拿大） ====================
   {
     attributeId: 'productTaxCode',
@@ -664,6 +793,437 @@ export const WALMART_DEFAULT_MAPPING_RULES: DefaultMappingConfig[] = [
     attributeName: 'Contains Aerosol',
     mappingType: 'enum_select',
     value: 'No',
+  },
+
+  // ==================== 组装说明 ====================
+  {
+    attributeId: 'assemblyInstructions',
+    attributeName: 'Assembly Instructions',
+    mappingType: 'channel_data',
+    value: 'productDescription',
+  },
+
+  // ==================== 面料成分 ====================
+  {
+    attributeId: 'fabricContent',
+    attributeName: 'Fabric Content',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'fabric_content_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 面料护理说明 ====================
+  {
+    attributeId: 'fabricCareInstructions',
+    attributeName: 'Fabric Care Instructions',
+    mappingType: 'default_value',
+    value: 'Wipe clean with a damp cloth',
+  },
+
+  // ==================== 配置/规格 ====================
+  {
+    attributeId: 'configuration',
+    attributeName: 'Configuration',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'configuration_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 布艺颜色 ====================
+  {
+    attributeId: 'fabricColor',
+    attributeName: 'Fabric Color',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'fabric_color_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 装饰色/次要颜色 ====================
+  {
+    attributeId: 'accentColor',
+    attributeName: 'Accent Color',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'accent_color_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 坐垫颜色 ====================
+  {
+    attributeId: 'cushionColor',
+    attributeName: 'Cushion Color',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'cushion_color_extract',
+      param: '',
+    },
+  },
+  // Number of Panels - 面板数量
+  {
+    attributeId: 'numberOfPanels',
+    attributeName: 'Number of Panels',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'number_of_panels_extract',
+      param: '',
+    },
+  },
+  // Seat Back Style - 靠背样式
+  {
+    attributeId: 'seatBackStyle',
+    attributeName: 'Seat Back Style',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'seat_back_style_extract',
+      param: '',
+    },
+  },
+  // Power Type - 供电类型
+  {
+    attributeId: 'powerType',
+    attributeName: 'Power Type',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'power_type_extract',
+      param: '',
+    },
+  },
+  // Is Powered - 是否需要供电
+  {
+    attributeId: 'isPowered',
+    attributeName: 'Is Powered',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_powered_extract',
+      param: '',
+    },
+  },
+  // Recommended Uses - 推荐使用场景
+  {
+    attributeId: 'recommendedUses',
+    attributeName: 'Recommended Use',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'recommended_uses_extract',
+      param: '',
+    },
+  },
+  // Recommended Rooms - 推荐房间（三层兜底策略）
+  {
+    attributeId: 'recommendedRooms',
+    attributeName: 'Recommended Rooms',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'recommended_rooms_extract',
+      param: '',
+    },
+  },
+  // Mattress Firmness - 床垫硬度
+  {
+    attributeId: 'mattressFirmness',
+    attributeName: 'Mattress Firmness',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'mattress_firmness_extract',
+      param: '',
+    },
+  },
+  // Mattress Thickness - 床垫厚度
+  {
+    attributeId: 'mattressThickness',
+    attributeName: 'Mattress Thickness',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'mattress_thickness_extract',
+      param: '',
+    },
+  },
+  // Pump Included - 是否包含气泵
+  {
+    attributeId: 'pumpIncluded',
+    attributeName: 'Pump Included',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'pump_included_extract',
+      param: '',
+    },
+  },
+  // Fill Material - 填充材料
+  {
+    attributeId: 'fillMaterial',
+    attributeName: 'Fill Material',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'fill_material_extract',
+      param: '',
+    },
+  },
+  // Frame Material - 框架材料
+  {
+    attributeId: 'frameMaterial',
+    attributeName: 'Frame Material',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'frame_material_extract',
+      param: '',
+    },
+  },
+  // Seat Material - 座面材质
+  {
+    attributeId: 'seatMaterial',
+    attributeName: 'Seat Material',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'seat_material_extract',
+      param: '',
+    },
+  },
+  // Table Height - 桌子高度
+  {
+    attributeId: 'tableHeight',
+    attributeName: 'Table Height',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'table_height_extract',
+      param: '',
+    },
+  },
+  // Top Material - 顶部材质
+  {
+    attributeId: 'topMaterial',
+    attributeName: 'Top Material',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'top_material_extract',
+      param: '',
+    },
+  },
+  // Top Dimensions - 顶部尺寸
+  {
+    attributeId: 'topDimensions',
+    attributeName: 'Top Dimensions',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'top_dimensions_extract',
+      param: '',
+    },
+  },
+  // Top Finish - 顶部表面处理
+  {
+    attributeId: 'topFinish',
+    attributeName: 'Top Finish',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'top_finish_extract',
+      param: '',
+    },
+  },
+  // Hardware Finish - 五金表面处理
+  {
+    attributeId: 'hardwareFinish',
+    attributeName: 'Hardware Finish',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'hardware_finish_extract',
+      param: '',
+    },
+  },
+  // Base Material - 底座材质
+  {
+    attributeId: 'baseMaterial',
+    attributeName: 'Base Material',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'base_material_extract',
+      param: '',
+    },
+  },
+  // Base Color - 底座颜色
+  {
+    attributeId: 'baseColor',
+    attributeName: 'Base Color',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'base_color_extract',
+      param: '',
+    },
+  },
+  // Base Finish - 底座表面处理
+  {
+    attributeId: 'baseFinish',
+    attributeName: 'Base Finish',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'base_finish_extract',
+      param: '',
+    },
+  },
+  // Door Opening Style - 门开启方式
+  {
+    attributeId: 'doorOpeningStyle',
+    attributeName: 'Door Opening Style',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'door_opening_style_extract',
+      param: '',
+    },
+  },
+  // Door Style - 门板样式
+  {
+    attributeId: 'doorStyle',
+    attributeName: 'Door Style',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'door_style_extract',
+      param: '',
+    },
+  },
+  // Slat Width - 板条宽度
+  {
+    attributeId: 'slatWidth',
+    attributeName: 'Slat Width',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'slat_width_extract',
+      param: '',
+    },
+  },
+  // Number of Hooks - 挂钩数量
+  {
+    attributeId: 'numberOfHooks',
+    attributeName: 'Number of Hooks',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'number_of_hooks_extract',
+      param: '',
+    },
+  },
+  // Headboard Style - 床头板样式
+  {
+    attributeId: 'headboardStyle',
+    attributeName: 'Headboard Style',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'headboard_style_extract',
+      param: '',
+    },
+  },
+  // Frame Color - 框架颜色
+  {
+    attributeId: 'frameColor',
+    attributeName: 'Frame Color',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'frame_color_extract',
+      param: '',
+    },
+  },
+  // Is Smart - 是否智能家具
+  {
+    attributeId: 'isSmart',
+    attributeName: 'Is Smart',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_smart_extract',
+      param: '',
+    },
+  },
+  // Is Antique - 是否古董
+  {
+    attributeId: 'isAntique',
+    attributeName: 'Is Antique',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_antique_extract',
+      param: '',
+    },
+  },
+  // Is Foldable - 是否可折叠
+  {
+    attributeId: 'isFoldable',
+    attributeName: 'Is Foldable',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_foldable_extract',
+      param: '',
+    },
+  },
+  // Is Inflatable - 是否充气
+  {
+    attributeId: 'isInflatable',
+    attributeName: 'Is Inflatable',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_inflatable_extract',
+      param: '',
+    },
+  },
+  // Is Wheeled - 是否带轮
+  {
+    attributeId: 'isWheeled',
+    attributeName: 'Is Wheeled',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_wheeled_extract',
+      param: '',
+    },
+  },
+  // Is Industrial - 是否工业用途
+  {
+    attributeId: 'isIndustrial',
+    attributeName: 'Is Industrial',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'is_industrial_extract',
+      param: '',
+    },
+  },
+  // Assembled Product Length - 组装后产品长度
+  {
+    attributeId: 'assembledProductLength',
+    attributeName: 'Assembled Product Length',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'assembled_product_length_extract',
+      param: '',
+    },
+  },
+  // Assembled Product Width - 组装后产品宽度
+  {
+    attributeId: 'assembledProductWidth',
+    attributeName: 'Assembled Product Width',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'assembled_product_width_extract',
+      param: '',
+    },
+  },
+  // Assembled Product Height - 组装后产品高度
+  {
+    attributeId: 'assembledProductHeight',
+    attributeName: 'Assembled Product Height',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'assembled_product_height_extract',
+      param: '',
+    },
+  },
+  // Assembled Product Weight - 组装后产品重量
+  {
+    attributeId: 'assembledProductWeight',
+    attributeName: 'Assembled Product Weight',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'assembled_product_weight_extract',
+      param: '',
+    },
   },
 ];
 

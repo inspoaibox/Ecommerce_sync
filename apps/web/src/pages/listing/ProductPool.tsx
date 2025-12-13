@@ -136,6 +136,8 @@ function ProductDetailTabs({ product }: { product: any }) {
                 </Descriptions.Item>
                 <Descriptions.Item label="供货商">{getAttr(attrs, 'supplier') || '-'}</Descriptions.Item>
                 <Descriptions.Item label="图片数">{(product.imageUrls?.length || 0) + (product.mainImageUrl ? 1 : 0)} 张</Descriptions.Item>
+                <Descriptions.Item label="产品说明" span={2}>{getAttr(attrs, 'productDescription') || '-'}</Descriptions.Item>
+                <Descriptions.Item label="产品资质" span={2}>{getAttr(attrs, 'productCertification') || '-'}</Descriptions.Item>
               </Descriptions>
 
               {/* 商品描述 */}

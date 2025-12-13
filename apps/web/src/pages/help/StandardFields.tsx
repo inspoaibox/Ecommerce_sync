@@ -403,7 +403,7 @@ export default function StandardFields() {
                     size="small"
                     pagination={false}
                     columns={[
-                      { title: '字段', dataIndex: 'field', width: 140, render: (t: string) => <Text code>{t}</Text> },
+                      { title: '字段', dataIndex: 'field', width: 160, render: (t: string) => <Text code>{t}</Text> },
                       { title: '用途', dataIndex: 'usage', width: 200 },
                       { title: '数据来源', dataIndex: 'source' },
                     ]}
@@ -412,6 +412,8 @@ export default function StandardFields() {
                       { key: 'productType', field: 'productType', usage: '商品物流性质分类', source: '根据尺寸/重量/包裹数自动判断' },
                       { key: 'supplier', field: 'supplier', usage: '供货商/卖家名称', source: '渠道 sellerInfo.sellerStore' },
                       { key: 'unAvailablePlatform', field: 'unAvailablePlatform', usage: '禁止销售的平台列表', source: '渠道 unAvailablePlatform' },
+                      { key: 'productDescription', field: 'productDescription', usage: '产品使用说明、安装指南', source: '手动编辑或渠道导入' },
+                      { key: 'productCertification', field: 'productCertification', usage: '产品认证、合规证书信息', source: '手动编辑或渠道导入' },
                     ]}
                   />
                   <Paragraph type="secondary" style={{ marginTop: 8 }}>
@@ -419,6 +421,12 @@ export default function StandardFields() {
                   </Paragraph>
                   <Paragraph type="secondary" style={{ marginTop: 8 }}>
                     <Text strong>unAvailablePlatform 格式</Text>：数组格式，每个元素包含 id 和 name，如 [&#123;"id": "1", "name": "Wayfair"&#125;]
+                  </Paragraph>
+                  <Paragraph type="secondary" style={{ marginTop: 8 }}>
+                    <Text strong>productDescription</Text>：产品说明字段，用于存储详细的产品使用说明、安装指南、注意事项等信息，支持 HTML 格式
+                  </Paragraph>
+                  <Paragraph type="secondary" style={{ marginTop: 8 }}>
+                    <Text strong>productCertification</Text>：产品资质字段，用于存储产品认证信息、合规证书、质检报告等资质说明
                   </Paragraph>
                 </Card>
 

@@ -16,6 +16,70 @@ import {
 import { ChannelProductDetail } from '@/adapters/channels/gigacloud.adapter';
 import { PlatformAdapterFactory, WalmartAdapter } from '@/adapters/platforms';
 
+// CA 市场 spec 文件缓存
+let caSpecCache: any = null;
+const loadCASpec = (): any => {
+  if (!caSpecCache) {
+    try {
+      caSpecCache = require('@/adapters/platforms/specs/CA_MP_ITEM_INTL_SPEC.json');
+    } catch (e) {
+      console.error('[ListingService] Failed to load CA spec file:', e);
+    }
+  }
+  return caSpecCache;
+};
+
+// 从 spec 文件解析多语言字段列表（带缓存）
+let multiLangFieldsCache: Set<string> | null = null;
+const getMultiLangFieldsFromSpec = (): Set<string> => {
+  if (multiLangFieldsCache) return multiLangFieldsCache;
+  
+  const multiLangFields = new Set<string>();
+  const spec = loadCASpec();
+  if (!spec) return multiLangFields;
+
+  // 递归解析 spec 中所有包含 "en" 属性的字段
+  const parseProperties = (props: any, path: string = '') => {
+    if (!props || typeof props !== 'object') return;
+    
+    for (const [key, value] of Object.entries(props) as [string, any][]) {
+      // 如果字段有 properties.en，说明是多语言字段
+      if (value?.properties?.en) {
+        multiLangFields.add(key);
+      }
+      // 如果是数组类型，检查 items.properties.en
+      if (value?.type === 'array' && value?.items?.properties?.en) {
+        multiLangFields.add(key);
+      }
+      // 递归检查嵌套属性
+      if (value?.properties) {
+        parseProperties(value.properties, `${path}.${key}`);
+      }
+    }
+  };
+
+  try {
+    const mpItemProps = spec?.properties?.MPItem?.items?.properties;
+    if (mpItemProps?.Orderable?.properties) {
+      parseProperties(mpItemProps.Orderable.properties);
+    }
+    // Visible 下的类目属性也需要检查
+    if (mpItemProps?.Visible?.properties) {
+      for (const categoryProps of Object.values(mpItemProps.Visible.properties) as any[]) {
+        if (categoryProps?.properties) {
+          parseProperties(categoryProps.properties);
+        }
+      }
+    }
+    console.log(`[ListingService] Parsed ${multiLangFields.size} multi-lang fields from CA spec`);
+  } catch (e) {
+    console.error('[ListingService] Failed to parse multi-lang fields:', e);
+  }
+
+  multiLangFieldsCache = multiLangFields;
+  return multiLangFields;
+};
+
 @Injectable()
 export class ListingService {
   constructor(
@@ -417,7 +481,8 @@ export class ListingService {
           });
           
           try {
-            const result = await adapter.createItem(itemData);
+            // CA 市场需要传递 subCategory（类目ID）
+            const result = await adapter.createItem(itemData, product.platformCategoryId || undefined);
             
             feedId = result.feedId;
             console.log(`[submitListing] Product ${product.sku} submitted, feedId: ${feedId}`);
@@ -587,16 +652,20 @@ export class ListingService {
   }
 
   /**
-   * 将平铺的属性转换为 Walmart V5.0 格式
-   * V5.0 结构: { Orderable: {...}, Visible: { [categoryName]: {...} } }
+   * 将平铺的属性转换为 Walmart Feed 格式
    * 
-   * 参考 woo-walmart-sync 插件的实现:
-   * - Orderable 部分: sku, productIdentifiers, price, quantity, ShippingWeight, fulfillmentLagTime 等
-   * - Visible 部分: productName, mainImageUrl, productSecondaryImageURL, brand, shortDescription 等
+   * US 市场 (V5.0 结构):
+   * - Orderable: sku, productIdentifiers, price, quantity, ShippingWeight 等
+   * - Visible: { [categoryName]: { productName, mainImageUrl, brand, ... } }
+   * 
+   * CA 市场 (V3.16 INTL 结构):
+   * - Orderable: 所有字段都在这里，包括 productName, brand 等
+   * - 多语言字段需要 { en: "...", fr: "..." } 格式
+   * - Visible: { [categoryName]: {} } (空对象)
    * 
    * @param platformAttrs 平铺的平台属性
    * @param categoryId 类目ID（用于 Visible 层级）
-   * @param shopConfig 店铺配置（备货时间、履行中心等）
+   * @param shopConfig 店铺配置（备货时间、履行中心、区域等）
    */
   private convertToWalmartV5Format(
     platformAttrs: Record<string, any>,
@@ -614,11 +683,19 @@ export class ListingService {
       return platformAttrs;
     }
 
-    // Orderable 字段列表（参考 woo-walmart-sync）
-    const orderableFields = [
+    const region = shopConfig?.region || 'US';
+    const isInternational = region !== 'US';  // CA, MX, CL 等国际市场
+
+    // CA/国际市场：需要多语言格式的字段
+    // 从 CA_MP_ITEM_INTL_SPEC.json 动态解析，而非硬编码
+    const multiLangFields = getMultiLangFieldsFromSpec();
+
+    // US 市场的 Orderable 字段列表
+    const usOrderableFields = [
       'sku',
       'productIdentifiers',
       'price',
+      'msrp',
       'quantity',
       'ShippingWeight',
       'shippingWeight',
@@ -643,8 +720,31 @@ export class ListingService {
       'skuUpdate',
     ];
 
+    // CA/国际市场：几乎所有字段都在 Orderable 层级
+    // 参考 CA_MP_ITEM_INTL_SPEC.json
+    const caOrderableFields = [
+      ...usOrderableFields,
+      'productName',
+      'brand',
+      'shortDescription',
+      'keyFeatures',
+      'features',
+      'mainImageUrl',
+      'productSecondaryImageURL',
+      'manufacturer',
+      'modelNumber',
+      'countryOfOriginAssembly',
+      'countryOfOriginTextiles',
+      'productTaxCode',
+      'hsCode',
+      'MinimumAdvertisedPrice',
+    ];
+
     const orderable: Record<string, any> = {};
     const visible: Record<string, any> = {};
+
+    // 根据市场选择 Orderable 字段列表
+    const orderableFields = isInternational ? caOrderableFields : usOrderableFields;
 
     // 分离 Orderable 和 Visible 字段
     for (const [key, value] of Object.entries(platformAttrs)) {
@@ -657,46 +757,81 @@ export class ListingService {
         (f) => f.toLowerCase() === key.toLowerCase(),
       );
 
+      // 国际市场：转换多语言字段格式
+      let processedValue = value;
+      if (isInternational && multiLangFields.has(key)) {
+        processedValue = this.convertToMultiLangFormat(key, value);
+      }
+
       if (isOrderable) {
-        orderable[key] = value;
+        orderable[key] = processedValue;
       } else {
-        visible[key] = value;
+        visible[key] = processedValue;
       }
     }
 
-    // 应用店铺配置的默认值（只应用店铺设置中明确配置的字段）
+    // 应用店铺配置的默认值
     if (shopConfig) {
-      // 备货时间 (fulfillmentLagTime) - 只有店铺设置中有值才应用
       if (!orderable.fulfillmentLagTime && shopConfig.fulfillmentLagTime) {
         orderable.fulfillmentLagTime = String(shopConfig.fulfillmentLagTime);
       }
-
-      // 履行中心ID (fulfillmentCenterID) - 只有店铺设置中有值才应用
       if (!orderable.fulfillmentCenterID && shopConfig.fulfillmentCenterId) {
         orderable.fulfillmentCenterID = shopConfig.fulfillmentCenterId;
       }
-      
-      // 注意：startDate 和 releaseDate 不再自动生成
-      // 如果需要这些字段，用户应该在类目属性映射中配置
     }
 
-    // 构建 V5.0 结构
+    // 构建最终结构
     const result: Record<string, any> = {};
 
     if (Object.keys(orderable).length > 0) {
       result.Orderable = orderable;
     }
 
-    if (Object.keys(visible).length > 0) {
-      // Visible 下需要有类目名称层级
-      // 如果有 categoryId，使用它作为 key；否则使用 'Default'
-      const categoryKey = categoryId || 'Default';
-      result.Visible = {
-        [categoryKey]: visible,
-      };
+    // Visible 层级处理
+    const categoryKey = categoryId || 'Default';
+    if (isInternational) {
+      // 国际市场：Visible 下的类目对象为空（所有字段都在 Orderable）
+      result.Visible = { [categoryKey]: {} };
+    } else if (Object.keys(visible).length > 0) {
+      // US 市场：Visible 下包含非 Orderable 字段
+      result.Visible = { [categoryKey]: visible };
     }
 
     return result;
+  }
+
+  /**
+   * 将字段值转换为多语言格式 { en: "...", fr: "..." }
+   * 用于 CA 等国际市场
+   * 
+   * @param fieldName 字段名
+   * @param value 原始值（字符串或数组）
+   */
+  private convertToMultiLangFormat(fieldName: string, value: any): any {
+    // 如果已经是多语言格式，直接返回
+    if (value && typeof value === 'object' && ('en' in value || 'fr' in value)) {
+      return value;
+    }
+
+    // 数组类型字段（如 keyFeatures, features）
+    if (Array.isArray(value)) {
+      return value.map(item => {
+        if (typeof item === 'string') {
+          return { en: item };  // 暂时只填充英文，法语后续处理
+        }
+        if (item && typeof item === 'object' && ('en' in item || 'fr' in item)) {
+          return item;
+        }
+        return { en: String(item) };
+      });
+    }
+
+    // 字符串类型字段
+    if (typeof value === 'string') {
+      return { en: value };  // 暂时只填充英文，法语后续处理
+    }
+
+    return value;
   }
 
   /**
