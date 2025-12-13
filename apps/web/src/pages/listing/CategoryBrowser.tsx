@@ -59,6 +59,9 @@ const AUTO_GENERATE_RULES: Record<string, { name: string; description: string }>
   electronics_indicator_extract: { name: '智能提取电子元件', description: '从描述判断是否含电子元件，默认No' },
   date_offset: { name: '日期偏移（天）', description: '基于当前日期偏移指定天数，负数为往前，正数为往后' },
   date_offset_years: { name: '日期偏移（年）', description: '基于当前日期偏移指定年数，如10表示往后10年' },
+  country_of_origin_extract: { name: '智能提取原产国', description: '优先从placeOfOrigin字段匹配，默认CN - China' },
+  features_extract: { name: '智能提取附加功能', description: '从描述和五点描述中提取产品特色功能，返回数组格式' },
+  llm_extract: { name: 'LLM智能提取', description: '使用本地大模型提取属性，参数格式：属性名|提取指令' },
 };
 
 // 常用渠道字段路径（基于新版简化 StandardProduct 接口）
@@ -117,10 +120,20 @@ interface MappingRule {
   }>;
 }
 
+// localStorage keys for persisting selection
+const STORAGE_KEY_PLATFORM = 'categoryBrowser_selectedPlatform';
+const STORAGE_KEY_COUNTRY = 'categoryBrowser_selectedCountry';
+
 export default function CategoryBrowser() {
   const [platforms, setPlatforms] = useState<any[]>([]);
-  const [selectedPlatform, setSelectedPlatform] = useState<string>('');
-  const [selectedCountry, setSelectedCountry] = useState<string>('US');
+  const [selectedPlatform, setSelectedPlatform] = useState<string>(() => {
+    // 从 localStorage 恢复上次选择的平台
+    return localStorage.getItem(STORAGE_KEY_PLATFORM) || '';
+  });
+  const [selectedCountry, setSelectedCountry] = useState<string>(() => {
+    // 从 localStorage 恢复上次选择的国家
+    return localStorage.getItem(STORAGE_KEY_COUNTRY) || 'US';
+  });
   const [availableCountries, setAvailableCountries] = useState<string[]>([]);
   const [treeData, setTreeData] = useState<DataNode[]>([]);
   const [loading, setLoading] = useState(false);
@@ -164,11 +177,30 @@ export default function CategoryBrowser() {
       const res: any = await platformApi.list({ pageSize: 100 });
       setPlatforms(res.data || []);
       if (res.data?.length > 0) {
-        setSelectedPlatform(res.data[0].id);
+        // 如果 localStorage 中有保存的平台且该平台仍然存在，使用它
+        const savedPlatform = localStorage.getItem(STORAGE_KEY_PLATFORM);
+        const platformExists = res.data.some((p: any) => p.id === savedPlatform);
+        if (!savedPlatform || !platformExists) {
+          // 没有保存的平台或平台不存在，使用第一个
+          setSelectedPlatform(res.data[0].id);
+          localStorage.setItem(STORAGE_KEY_PLATFORM, res.data[0].id);
+        }
       }
     } catch (e) {
       console.error(e);
     }
+  };
+
+  // 保存平台选择到 localStorage
+  const handlePlatformChange = (platformId: string) => {
+    setSelectedPlatform(platformId);
+    localStorage.setItem(STORAGE_KEY_PLATFORM, platformId);
+  };
+
+  // 保存国家选择到 localStorage
+  const handleCountryChange = (country: string) => {
+    setSelectedCountry(country);
+    localStorage.setItem(STORAGE_KEY_COUNTRY, country);
   };
 
   useEffect(() => {
@@ -1015,14 +1047,14 @@ export default function CategoryBrowser() {
           <Space size="small" wrap={false}>
             <Select
               value={selectedPlatform}
-              onChange={setSelectedPlatform}
+              onChange={handlePlatformChange}
               style={{ width: 90 }}
               options={platforms.map(p => ({ value: p.id, label: p.name }))}
               size="small"
             />
             <Select
               value={selectedCountry}
-              onChange={setSelectedCountry}
+              onChange={handleCountryChange}
               style={{ width: 80 }}
               options={COUNTRY_OPTIONS}
               suffixIcon={<GlobalOutlined />}
@@ -1159,7 +1191,7 @@ export default function CategoryBrowser() {
                     key={c} 
                     color={c === selectedCountry ? 'blue' : 'default'}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => setSelectedCountry(c)}
+                    onClick={() => handleCountryChange(c)}
                   >
                     {COUNTRY_OPTIONS.find(o => o.value === c)?.label || c}
                   </Tag>

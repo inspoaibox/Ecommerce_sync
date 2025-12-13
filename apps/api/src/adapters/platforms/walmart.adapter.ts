@@ -8,6 +8,22 @@ import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
 import { WalmartRegionConfig, getWalmartRegionConfig } from './walmart.config';
 
+// 加拿大市场 spec 文件（直接 import，避免运行时路径问题）
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+let caSpecCache: any = null;
+const loadCASpec = () => {
+  if (!caSpecCache) {
+    try {
+      // 使用 require 动态加载，支持编译后的路径
+      caSpecCache = require('./specs/CA_MP_ITEM_INTL_SPEC.json');
+      console.log('[Walmart] CA spec file loaded successfully');
+    } catch (e) {
+      console.error('[Walmart] Failed to load CA spec file:', e);
+    }
+  }
+  return caSpecCache;
+};
+
 export class WalmartAdapter extends BasePlatformAdapter {
   private client: AxiosInstance;
   private accessToken: string | null = null;
@@ -909,10 +925,289 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
   /**
    * 获取类目属性
-   * 使用 Item Spec API: POST /v3/items/spec（美国）或 /v3/{market}/items/spec（其他市场）
-   * 参考 woo-walmart-sync 插件的实现
+   * 美国市场: 使用 Item Spec API: POST /v3/items/spec
+   * 加拿大市场: 从本地 spec 文件解析（CA_MP_ITEM_INTL_SPEC.json）
+   * 其他市场: 暂不支持
    */
   async getCategoryAttributes(categoryId: string): Promise<Array<{
+    attributeId: string;
+    name: string;
+    description?: string;
+    dataType: string;
+    isRequired: boolean;
+    isMultiSelect: boolean;
+    maxLength?: number;
+    enumValues?: string[];
+    conditionalRequired?: Array<{
+      dependsOn: string;
+      dependsOnValue: string;
+    }>;
+  }>> {
+    // 加拿大市场从本地 spec 文件解析属性
+    if (this.regionConfig.region === 'CA') {
+      return this.getCACategoryAttributes(categoryId);
+    }
+
+    // 美国市场从 API 获取属性
+    return this.getUSCategoryAttributes(categoryId);
+  }
+
+  /**
+   * 获取加拿大市场的类目属性
+   * 从本地 CA_MP_ITEM_INTL_SPEC.json 文件解析
+   */
+  private async getCACategoryAttributes(categoryId: string): Promise<Array<{
+    attributeId: string;
+    name: string;
+    description?: string;
+    dataType: string;
+    isRequired: boolean;
+    isMultiSelect: boolean;
+    maxLength?: number;
+    enumValues?: string[];
+  }>> {
+    try {
+      // 加载 spec 文件（带缓存）
+      const spec = loadCASpec();
+      if (!spec) {
+        console.error('[Walmart] CA spec file not loaded');
+        return [];
+      }
+
+      // 将 categoryId（下划线格式）转换为 categoryName（可读格式）
+      const categoryName = this.getCategoryNameById(categoryId);
+      if (!categoryName) {
+        console.error(`[Walmart] Category name not found for ID: ${categoryId}`);
+        return [];
+      }
+
+      console.log(`[Walmart] Getting attributes for category: ${categoryName} (ID: ${categoryId}), region: ${this.regionConfig.region}`);
+
+      const attributes: Array<{
+        attributeId: string;
+        name: string;
+        description?: string;
+        dataType: string;
+        isRequired: boolean;
+        isMultiSelect: boolean;
+        maxLength?: number;
+        enumValues?: string[];
+      }> = [];
+
+      const mpItemProps = spec?.properties?.MPItem?.items?.properties;
+      if (!mpItemProps) {
+        console.error('[Walmart] Invalid spec file structure');
+        return [];
+      }
+
+      // 1. 解析 Orderable 通用属性
+      const orderable = mpItemProps.Orderable;
+      if (orderable?.properties) {
+        const orderableRequired = orderable.required || [];
+        for (const [attrName, attrDef] of Object.entries(orderable.properties) as [string, any][]) {
+          const attr = this.parseSpecAttribute(attrName, attrDef, orderableRequired.includes(attrName));
+          if (attr) attributes.push(attr);
+        }
+      }
+
+      // 2. 解析 Visible 类目特定属性
+      const visible = mpItemProps.Visible;
+      if (visible?.properties?.[categoryName]?.properties) {
+        const categoryProps = visible.properties[categoryName].properties;
+        const categoryRequired = visible.properties[categoryName].required || [];
+        
+        console.log(`[Walmart] Found ${Object.keys(categoryProps).length} category-specific attributes for ${categoryName}`);
+        
+        for (const [attrName, attrDef] of Object.entries(categoryProps) as [string, any][]) {
+          const attr = this.parseSpecAttribute(attrName, attrDef, categoryRequired.includes(attrName));
+          if (attr) attributes.push(attr);
+        }
+      } else {
+        console.log(`[Walmart] No Visible properties found for category: ${categoryName}`);
+      }
+
+      console.log(`[Walmart] Total attributes for ${categoryName}: ${attributes.length}`);
+      return attributes;
+    } catch (error: any) {
+      console.error('[Walmart] Get international category attributes failed:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * 根据 categoryId 获取 categoryName
+   * categoryId: 下划线格式（如 furniture_other）
+   * categoryName: 可读格式（如 Furniture）
+   * 
+   * 使用静态映射，避免每次都调用 API
+   */
+  private getCategoryNameById(categoryId: string): string | null {
+    // 静态映射表：categoryId -> categoryName（来自 taxonomy API 响应）
+    const categoryIdToName: Record<string, string> = {
+      'alcoholic_beverages': 'Alcoholic Beverages',
+      'animal_accessories': 'Animal Accessories',
+      'animal_food': 'Animal Food',
+      'animal_health_and_grooming': 'Animal Health & Grooming',
+      'animal_other': 'Animal Other',
+      'art_and_craft_other': 'Art & Craft',
+      'baby_clothing': 'Baby Clothing',
+      'baby_other': 'Baby Diapering, Care, & Other',
+      'baby_food': 'Baby Food',
+      'baby_furniture': 'Baby Furniture',
+      'baby_toys': 'Baby Toys',
+      'child_car_seats': 'Baby Transport',
+      'personal_care': 'Beauty, Personal Care, & Hygiene',
+      'bedding': 'Bedding',
+      'books_and_magazines': 'Books & Magazines',
+      'building_supply': 'Building Supply',
+      'cameras_and_lenses': 'Cameras & Lenses',
+      'carriers_and_accessories_other': 'Carriers & Accessories',
+      'cases_and_bags': 'Cases & Bags',
+      'cell_phones': 'Cell Phones',
+      'ceremonial_clothing_and_accessories': 'Ceremonial Clothing & Accessories',
+      'clothing_other': 'Clothing',
+      'computer_components': 'Computer Components',
+      'computers': 'Computers',
+      'costumes': 'Costumes',
+      'cycling': 'Cycling',
+      'decorations_and_favors': 'Decorations & Favors',
+      'electrical': 'Electrical',
+      'electronics_accessories': 'Electronics Accessories',
+      'electronics_cables': 'Electronics Cables',
+      'electronics_other': 'Electronics Other',
+      'food_and_beverage_other': 'Food & Beverage',
+      'footwear_other': 'Footwear',
+      'fuels_and_lubricants': 'Fuels & Lubricants',
+      'funeral': 'Funeral',
+      'furniture_other': 'Furniture',
+      'garden_and_patio_other': 'Garden & Patio',
+      'gift_supply_and_awards': 'Gift Supply & Awards',
+      'grills_and_outdoor_cooking': 'Grills & Outdoor Cooking',
+      'hardware': 'Hardware',
+      'health_and_beauty_electronics': 'Health & Beauty Electronics',
+      'home_other': 'Home Decor, Kitchen, & Other',
+      'cleaning_and_chemical': 'Household Cleaning Products & Supplies',
+      'instrument_accessories': 'Instrument Accessories',
+      'jewelry_other': 'Jewelry',
+      'land_vehicles': 'Land Vehicles',
+      'large_appliances': 'Large Appliances',
+      'medical_aids': 'Medical Aids & Equipment',
+      'medicine_and_supplements': 'Medicine & Supplements',
+      'movies': 'Movies',
+      'music_cases_and_bags': 'Music Cases & Bags',
+      'music': 'Music',
+      'musical_instruments': 'Musical Instruments',
+      'office_other': 'Office',
+      'optical': 'Optical',
+      'optics': 'Optics',
+      'other_other': 'Other',
+      'photo_accessories': 'Photo Accessories',
+      'plumbing_and_hvac': 'Plumbing & HVAC',
+      'printers_scanners_and_imaging': 'Printers, Scanners, & Imaging',
+      'safety_and_emergency': 'Safety & Emergency',
+      'software': 'Software',
+      'sound_and_recording': 'Sound & Recording',
+      'sport_and_recreation_other': 'Sport & Recreation Other',
+      'storage': 'Storage',
+      'tv_shows': 'TV Shows',
+      'tvs_and_video_displays': 'TVs & Video Displays',
+      'tires': 'Tires',
+      'tools_and_hardware_other': 'Tools & Hardware Other',
+      'tools': 'Tools',
+      'toys_other': 'Toys',
+      'vehicle_other': 'Vehicle Other',
+      'vehicle_parts_and_accessories': 'Vehicle Parts & Accessories',
+      'video_games': 'Video Games',
+      'video_projectors': 'Video Projectors',
+      'watches_other': 'Watches',
+      'watercraft': 'Watercraft',
+      'weapons': 'Weapons',
+      'wheels_and_wheel_components': 'Wheels & Wheel Components',
+    };
+
+    return categoryIdToName[categoryId] || null;
+  }
+
+  /**
+   * 解析 spec 文件中的单个属性定义
+   */
+  private parseSpecAttribute(
+    attrName: string,
+    attrDef: any,
+    isRequired: boolean
+  ): {
+    attributeId: string;
+    name: string;
+    description?: string;
+    dataType: string;
+    isRequired: boolean;
+    isMultiSelect: boolean;
+    maxLength?: number;
+    enumValues?: string[];
+  } | null {
+    if (!attrDef) return null;
+
+    // 处理嵌套对象（如 productName: { properties: { en: {...}, fr: {...} } }）
+    let actualDef = attrDef;
+    if (attrDef.properties?.en) {
+      actualDef = attrDef.properties.en;
+    }
+
+    // 处理数组类型
+    let isMultiSelect = false;
+    if (attrDef.type === 'array' && attrDef.items) {
+      isMultiSelect = true;
+      if (attrDef.items.properties?.en) {
+        actualDef = attrDef.items.properties.en;
+      } else if (attrDef.items.enum) {
+        actualDef = attrDef.items;
+      } else {
+        actualDef = attrDef.items;
+      }
+    }
+
+    const dataType = this.mapSpecTypeToDataType(actualDef.type, actualDef.enum);
+
+    return {
+      attributeId: attrName,
+      name: actualDef.title || attrDef.title || attrName,
+      description: actualDef.description || attrDef.description,
+      dataType,
+      isRequired,
+      isMultiSelect,
+      maxLength: actualDef.maxLength,
+      enumValues: actualDef.enum,
+    };
+  }
+
+  /**
+   * 将 JSON Schema 类型映射到我们的数据类型
+   */
+  private mapSpecTypeToDataType(type: string, hasEnum?: string[]): string {
+    if (hasEnum && hasEnum.length > 0) {
+      return 'enum';
+    }
+    switch (type) {
+      case 'string':
+        return 'string';
+      case 'number':
+      case 'integer':
+        return 'number';
+      case 'boolean':
+        return 'boolean';
+      case 'array':
+        return 'array';
+      case 'object':
+        return 'object';
+      default:
+        return 'string';
+    }
+  }
+
+  /**
+   * 获取美国市场的类目属性（从 API）
+   */
+  private async getUSCategoryAttributes(categoryId: string): Promise<Array<{
     attributeId: string;
     name: string;
     description?: string;

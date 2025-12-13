@@ -7,9 +7,10 @@ import {
   MappingRulesConfig,
   ResolveContext,
   ResolveResult,
-  ResolveError,
   AutoGenerateConfig,
 } from './interfaces/mapping-rule.interface';
+import * as compromise from 'compromise';
+const nlp = (compromise as any).default || compromise;
 
 /**
  * 属性解析器服务
@@ -33,7 +34,7 @@ export class AttributeResolverService {
    * - channel_data: 必须有非空的 value（字段路径）且渠道数据中有对应值
    * - enum_select: 必须有非空的 value
    * - upc_pool: 特殊处理，从 UPC 池获取
-   * - auto_generate: 不再自动生成，跳过
+   * - auto_generate: 根据规则自动生成（LLM 批量提取 + 本地规则兜底）
    */
   async resolveAttributes(
     mappingRules: MappingRulesConfig,
@@ -51,7 +52,7 @@ export class AttributeResolverService {
 
     for (const rule of rules) {
       try {
-        // 跳过没有配置值的规则（auto_generate 类型除外，它有特殊的 value 结构）
+        // 跳过没有配置值的规则
         if (!this.hasConfiguredValue(rule)) {
           continue;
         }
@@ -277,6 +278,7 @@ export class AttributeResolverService {
 
   /**
    * 解析自动生成规则
+   * 使用本地规则提取属性
    */
   private resolveAutoGenerate(
     config: AutoGenerateConfig,
@@ -286,6 +288,47 @@ export class AttributeResolverService {
     const { ruleType, param } = config;
 
     switch (ruleType) {
+      // 提取类规则
+      case 'color_extract':
+        return this.extractColor(channelAttributes);
+      case 'material_extract':
+        return this.extractMaterial(channelAttributes);
+      case 'location_extract':
+        return this.extractLocation(param, channelAttributes);
+      case 'piece_count_extract':
+        return this.extractPieceCount(param, channelAttributes);
+      case 'seating_capacity_extract':
+        return this.extractSeatingCapacity(param, channelAttributes);
+      case 'collection_extract':
+        return this.extractCollection(channelAttributes);
+      case 'color_category_extract':
+        return this.extractColorCategory(param, channelAttributes);
+      case 'home_decor_style_extract':
+        return this.extractHomeDecorStyle(param, channelAttributes);
+      case 'items_included_extract':
+        return this.extractItemsIncluded(channelAttributes);
+      case 'features_extract':
+        return this.extractFeatures(channelAttributes);
+      case 'pattern_extract':
+        return this.extractPattern(channelAttributes);
+      case 'country_of_origin_extract':
+        return this.extractCountryOfOrigin(channelAttributes);
+      case 'country_of_origin_textiles_extract':
+        return this.extractCountryOfOriginTextiles(channelAttributes);
+      case 'max_load_weight_extract':
+        return this.extractMaxLoadWeight(channelAttributes);
+      case 'leg_color_extract':
+        return this.extractLegColor(channelAttributes);
+      case 'leg_material_extract':
+        return this.extractLegMaterial(channelAttributes);
+      case 'seat_material_extract':
+        return this.extractSeatMaterial(channelAttributes);
+      case 'upholstered_extract':
+        return this.extractUpholstered(param, channelAttributes);
+      case 'electronics_indicator_extract':
+        return this.extractElectronicsIndicator(param, channelAttributes);
+
+      // 其他规则
       case 'sku_prefix':
         return `${param || ''}${context.productSku || ''}`;
 
@@ -293,13 +336,11 @@ export class AttributeResolverService {
         return `${context.productSku || ''}${param || ''}`;
 
       case 'brand_title':
-        // brand 现在在 customAttributes 中
         const brand = getCustomAttributeValue(channelAttributes, 'brand') || '';
         const title = getNestedValue(channelAttributes, 'title') || '';
         return `${brand} ${title}`.trim();
 
       case 'first_characteristic':
-        // characteristics 现在在 customAttributes 中
         const characteristics = getCustomAttributeValue(channelAttributes, 'characteristics');
         return Array.isArray(characteristics) ? characteristics[0] : undefined;
 
@@ -313,23 +354,8 @@ export class AttributeResolverService {
       case 'uuid':
         return this.generateUUID();
 
-      case 'color_extract':
-        return this.extractColor(channelAttributes);
-
-      case 'material_extract':
-        return this.extractMaterial(channelAttributes);
-
       case 'field_with_fallback':
         return this.resolveFieldWithFallback(param, channelAttributes);
-
-      case 'location_extract':
-        return this.extractLocation(param, channelAttributes);
-
-      case 'piece_count_extract':
-        return this.extractPieceCount(param, channelAttributes);
-
-      case 'seating_capacity_extract':
-        return this.extractSeatingCapacity(param, channelAttributes);
 
       case 'price_calculate':
         return this.calculatePrice(channelAttributes, context);
@@ -337,26 +363,8 @@ export class AttributeResolverService {
       case 'shipping_weight_extract':
         return this.extractShippingWeight(param, channelAttributes);
 
-      case 'collection_extract':
-        return this.extractCollection(channelAttributes);
-
-      case 'color_category_extract':
-        return this.extractColorCategory(param, channelAttributes);
-
-      case 'home_decor_style_extract':
-        return this.extractHomeDecorStyle(param, channelAttributes);
-
-      case 'items_included_extract':
-        return this.extractItemsIncluded(channelAttributes);
-
-      case 'leg_color_extract':
-        return this.extractLegColor(channelAttributes);
-
       case 'leg_finish_extract':
         return this.extractLegFinish(channelAttributes);
-
-      case 'leg_material_extract':
-        return this.extractLegMaterial(channelAttributes);
 
       case 'mpn_from_sku':
         return this.generateMpnFromSku(channelAttributes);
@@ -364,14 +372,8 @@ export class AttributeResolverService {
       case 'living_room_set_type_extract':
         return this.extractLivingRoomSetType(param, channelAttributes);
 
-      case 'max_load_weight_extract':
-        return this.extractMaxLoadWeight(channelAttributes);
-
       case 'net_content_statement_extract':
         return this.extractNetContentStatement(channelAttributes);
-
-      case 'pattern_extract':
-        return this.extractPattern(channelAttributes);
 
       case 'product_line_from_category':
         return this.extractProductLineFromCategory(channelAttributes, context);
@@ -385,15 +387,6 @@ export class AttributeResolverService {
       case 'seat_height_extract':
         return this.extractSeatHeight(channelAttributes);
 
-      case 'seat_material_extract':
-        return this.extractSeatMaterial(channelAttributes);
-
-      case 'upholstered_extract':
-        return this.extractUpholstered(param, channelAttributes);
-
-      case 'electronics_indicator_extract':
-        return this.extractElectronicsIndicator(param, channelAttributes);
-
       case 'date_offset':
         return this.generateDateWithOffset(param);
 
@@ -404,6 +397,327 @@ export class AttributeResolverService {
         this.logger.warn(`Unknown auto_generate rule type: ${ruleType}`);
         return undefined;
     }
+  }
+
+  /**
+   * 提取附加功能/特色
+   * 使用 NLP 从描述中智能提取产品的功能特性，返回数组格式
+   */
+  private extractFeatures(channelAttributes: Record<string, any>): string[] {
+    const features: Set<string> = new Set();
+    const title = getNestedValue(channelAttributes, 'title') || '';
+    const rawDescription = getNestedValue(channelAttributes, 'description') || '';
+    
+    // 清理 HTML 标签和 CSS 样式
+    const description = this.stripHtmlTags(rawDescription);
+    const text = `${title} ${description}`;
+
+    if (!text.trim()) {
+      return [];
+    }
+
+    const doc = nlp(text);
+
+    // 1. 提取形容词+名词短语（如 "adjustable height", "ergonomic design"）
+    const adjNouns = doc.match('#Adjective #Noun').out('array') as string[];
+    adjNouns.forEach((phrase: string) => {
+      const cleaned = phrase.trim();
+      if (cleaned.length > 3 && cleaned.length < 50) {
+        // 首字母大写
+        features.add(cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
+      }
+    });
+
+    // 2. 提取带有功能性动词的短语（如 "folds flat", "reclines back"）
+    const verbPhrases = doc.match('(#Verb|#Gerund) (#Adverb|#Adjective|#Noun)?').out('array') as string[];
+    const functionalVerbs = ['fold', 'recline', 'adjust', 'rotate', 'swivel', 'tilt', 'extend', 'expand', 'convert', 'store'];
+    verbPhrases.forEach((phrase: string) => {
+      const lower = phrase.toLowerCase();
+      if (functionalVerbs.some(v => lower.includes(v))) {
+        features.add(phrase.charAt(0).toUpperCase() + phrase.slice(1).trim());
+      }
+    });
+
+    // 3. 提取复合名词（如 "cup holder", "USB port", "lumbar support"）
+    const compoundNouns = doc.match('#Noun #Noun').out('array') as string[];
+    compoundNouns.forEach((phrase: string) => {
+      const cleaned = phrase.trim();
+      if (cleaned.length > 5 && cleaned.length < 40) {
+        features.add(cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
+      }
+    });
+
+    // 4. 关键功能词直接匹配（作为补充）
+    const keyFeatures = [
+      'waterproof', 'water-resistant', 'stain-resistant', 'scratch-resistant',
+      'rust-resistant', 'anti-slip', 'non-slip', 'ergonomic', 'portable',
+      'lightweight', 'foldable', 'collapsible', 'adjustable', 'removable',
+      'reversible', 'convertible', 'modular', 'stackable', 'breathable',
+    ];
+    const lowerText = text.toLowerCase();
+    keyFeatures.forEach(kw => {
+      if (lowerText.includes(kw)) {
+        features.add(kw.charAt(0).toUpperCase() + kw.slice(1).replace(/-/g, ' '));
+      }
+    });
+
+    // 返回数组，最多10个特性，过滤掉太短或无意义的
+    return Array.from(features)
+      .filter(f => f.length > 3 && !/^\d+$/.test(f))
+      .slice(0, 10);
+  }
+
+  /**
+   * 提取原产国
+   * 优先从 placeOfOrigin 字段匹配，默认返回 "CN - China"
+   * 返回格式：Walmart 枚举格式 "XX - Country Name"
+   */
+  private extractCountryOfOrigin(channelAttributes: Record<string, any>): string {
+    const defaultValue = 'CN - China';
+    
+    // 从 placeOfOrigin 字段获取产地信息
+    const placeOfOrigin = getNestedValue(channelAttributes, 'placeOfOrigin');
+    
+    if (!placeOfOrigin) {
+      return defaultValue;
+    }
+    
+    const origin = String(placeOfOrigin).toLowerCase().trim();
+    
+    // 常见国家/地区名称到 Walmart 枚举格式的映射
+    const countryMapping: Record<string, string> = {
+      // 中国
+      'china': 'CN - China',
+      'cn': 'CN - China',
+      'chinese': 'CN - China',
+      '中国': 'CN - China',
+      'mainland china': 'CN - China',
+      'prc': 'CN - China',
+      
+      // 美国
+      'usa': 'US - United States',
+      'us': 'US - United States',
+      'united states': 'US - United States',
+      'america': 'US - United States',
+      '美国': 'US - United States',
+      
+      // 加拿大
+      'canada': 'CA - Canada',
+      'ca': 'CA - Canada',
+      '加拿大': 'CA - Canada',
+      
+      // 墨西哥
+      'mexico': 'MX - Mexico',
+      'mx': 'MX - Mexico',
+      '墨西哥': 'MX - Mexico',
+      
+      // 日本
+      'japan': 'JP - Japan',
+      'jp': 'JP - Japan',
+      '日本': 'JP - Japan',
+      
+      // 韩国
+      'korea': 'KR - Korea, Republic of',
+      'south korea': 'KR - Korea, Republic of',
+      'kr': 'KR - Korea, Republic of',
+      '韩国': 'KR - Korea, Republic of',
+      
+      // 台湾
+      'taiwan': 'TW - Taiwan',
+      'tw': 'TW - Taiwan',
+      '台湾': 'TW - Taiwan',
+      
+      // 香港
+      'hong kong': 'HK - Hong Kong',
+      'hk': 'HK - Hong Kong',
+      '香港': 'HK - Hong Kong',
+      
+      // 越南
+      'vietnam': 'VN - Vietnam',
+      'vn': 'VN - Vietnam',
+      '越南': 'VN - Vietnam',
+      
+      // 印度
+      'india': 'IN - India',
+      'in': 'IN - India',
+      '印度': 'IN - India',
+      
+      // 印度尼西亚
+      'indonesia': 'ID - Indonesia',
+      'id': 'ID - Indonesia',
+      '印度尼西亚': 'ID - Indonesia',
+      '印尼': 'ID - Indonesia',
+      
+      // 马来西亚
+      'malaysia': 'MY - Malaysia',
+      'my': 'MY - Malaysia',
+      '马来西亚': 'MY - Malaysia',
+      
+      // 泰国
+      'thailand': 'TH - Thailand',
+      'th': 'TH - Thailand',
+      '泰国': 'TH - Thailand',
+      
+      // 菲律宾
+      'philippines': 'PH - Philippines',
+      'ph': 'PH - Philippines',
+      '菲律宾': 'PH - Philippines',
+      
+      // 德国
+      'germany': 'DE - Germany',
+      'de': 'DE - Germany',
+      '德国': 'DE - Germany',
+      
+      // 英国
+      'uk': 'GB - United Kingdom',
+      'united kingdom': 'GB - United Kingdom',
+      'britain': 'GB - United Kingdom',
+      'england': 'GB - United Kingdom',
+      'gb': 'GB - United Kingdom',
+      '英国': 'GB - United Kingdom',
+      
+      // 法国
+      'france': 'FR - France',
+      'fr': 'FR - France',
+      '法国': 'FR - France',
+      
+      // 意大利
+      'italy': 'IT - Italy',
+      'it': 'IT - Italy',
+      '意大利': 'IT - Italy',
+      
+      // 西班牙
+      'spain': 'ES - Spain',
+      'es': 'ES - Spain',
+      '西班牙': 'ES - Spain',
+      
+      // 荷兰
+      'netherlands': 'NL - Netherlands',
+      'nl': 'NL - Netherlands',
+      'holland': 'NL - Netherlands',
+      '荷兰': 'NL - Netherlands',
+      
+      // 波兰
+      'poland': 'PL - Poland',
+      'pl': 'PL - Poland',
+      '波兰': 'PL - Poland',
+      
+      // 土耳其
+      'turkey': 'TR - Turkey',
+      'tr': 'TR - Turkey',
+      '土耳其': 'TR - Turkey',
+      
+      // 巴西
+      'brazil': 'BR - Brazil',
+      'br': 'BR - Brazil',
+      '巴西': 'BR - Brazil',
+      
+      // 澳大利亚
+      'australia': 'AU - Australia',
+      'au': 'AU - Australia',
+      '澳大利亚': 'AU - Australia',
+      '澳洲': 'AU - Australia',
+      
+      // 新西兰
+      'new zealand': 'NZ - New Zealand',
+      'nz': 'NZ - New Zealand',
+      '新西兰': 'NZ - New Zealand',
+      
+      // 俄罗斯
+      'russia': 'RU - Russian Federation',
+      'ru': 'RU - Russian Federation',
+      '俄罗斯': 'RU - Russian Federation',
+      
+      // 孟加拉国
+      'bangladesh': 'BD - Bangladesh',
+      'bd': 'BD - Bangladesh',
+      '孟加拉': 'BD - Bangladesh',
+      
+      // 巴基斯坦
+      'pakistan': 'PK - Pakistan',
+      'pk': 'PK - Pakistan',
+      '巴基斯坦': 'PK - Pakistan',
+      
+      // 斯里兰卡
+      'sri lanka': 'LK - Sri Lanka',
+      'lk': 'LK - Sri Lanka',
+      '斯里兰卡': 'LK - Sri Lanka',
+      
+      // 柬埔寨
+      'cambodia': 'KH - Cambodia',
+      'kh': 'KH - Cambodia',
+      '柬埔寨': 'KH - Cambodia',
+      
+      // 缅甸
+      'myanmar': 'MM - Myanmar',
+      'burma': 'MM - Myanmar',
+      'mm': 'MM - Myanmar',
+      '缅甸': 'MM - Myanmar',
+    };
+    
+    // 精确匹配
+    if (countryMapping[origin]) {
+      return countryMapping[origin];
+    }
+    
+    // 模糊匹配：检查是否包含关键词
+    for (const [keyword, value] of Object.entries(countryMapping)) {
+      if (origin.includes(keyword) || keyword.includes(origin)) {
+        return value;
+      }
+    }
+    
+    // 如果输入已经是 "XX - Country" 格式，直接返回
+    if (/^[A-Z]{2}\s*-\s*.+/.test(placeOfOrigin)) {
+      return placeOfOrigin;
+    }
+    
+    // 无法匹配，返回默认值
+    return defaultValue;
+  }
+
+  /**
+   * 提取纺织品原产国
+   * 优先从 placeOfOrigin 字段匹配，默认返回 "Imported"
+   * 枚举值：["USA and Imported", "Imported", "USA", "USA or Imported"]
+   */
+  private extractCountryOfOriginTextiles(channelAttributes: Record<string, any>): string {
+    const defaultValue = 'Imported';
+    
+    // 从 placeOfOrigin 字段获取产地信息
+    const placeOfOrigin = getNestedValue(channelAttributes, 'placeOfOrigin');
+    
+    if (!placeOfOrigin) {
+      return defaultValue;
+    }
+    
+    const origin = String(placeOfOrigin).toLowerCase().trim();
+    
+    // 美国相关关键词
+    const usaKeywords = ['usa', 'us', 'united states', 'america', '美国'];
+    
+    // 检查是否是美国制造
+    const isUSA = usaKeywords.some(keyword => origin.includes(keyword));
+    
+    if (isUSA) {
+      // 检查是否同时包含进口成分
+      const importedKeywords = ['imported', 'import', 'china', 'vietnam', 'india', 'mexico', 'foreign'];
+      const hasImported = importedKeywords.some(keyword => origin.includes(keyword));
+      
+      if (hasImported) {
+        // 同时包含美国和进口
+        if (origin.includes(' or ')) {
+          return 'USA or Imported';
+        }
+        return 'USA and Imported';
+      }
+      
+      // 纯美国制造
+      return 'USA';
+    }
+    
+    // 非美国制造，返回 Imported
+    return defaultValue;
   }
 
   /**
@@ -2082,12 +2396,18 @@ export class AttributeResolverService {
     const description = getNestedValue(channelAttributes, 'description') || '';
     const text = `${title} ${description}`.toLowerCase();
 
-    // 电子元件相关关键词
+    // 电子元件相关关键词（更精确的匹配）
+    // 注意：避免误匹配 "light luxury"（轻奢）等非电子含义的词
     const electronicsKeywords = [
       'electric', 'electronic', 'powered', 'motorized', 'motor',
-      'usb', 'led', 'light', 'bluetooth', 'wireless', 'rechargeable',
-      'battery', 'power recliner', 'power lift', 'massage',
-      'heated', 'heating', 'smart', 'remote control',
+      'usb port', 'usb charging', 'usb outlet',
+      'led light', 'led strip', 'led lamp', 'with led', 'built-in led',
+      'bluetooth', 'wireless charging', 'rechargeable',
+      'battery powered', 'battery operated', 'batteries included',
+      'power recliner', 'power lift', 'power outlet',
+      'massage chair', 'massage function', 'heated seat', 'heating pad',
+      'smart home', 'smart furniture', 'remote control', 'with remote',
+      'speaker', 'speakers', 'sound system',
     ];
 
     for (const keyword of electronicsKeywords) {
@@ -2158,5 +2478,33 @@ export class AttributeResolverService {
 
     // 保留三位小数（符合 API 要求的 multipleOf: 0.001）
     return Math.round(lbs * 1000) / 1000;
+  }
+
+  /**
+   * 清理 HTML 标签和 CSS 样式
+   * 用于从描述中提取纯文本内容
+   */
+  private stripHtmlTags(html: string): string {
+    if (!html) return '';
+    
+    return html
+      // 移除 style 标签及其内容
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      // 移除 script 标签及其内容
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      // 移除内联 style 属性
+      .replace(/\s*style\s*=\s*["'][^"']*["']/gi, '')
+      // 移除所有 HTML 标签
+      .replace(/<[^>]+>/g, ' ')
+      // 解码 HTML 实体
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      // 移除多余空白
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }

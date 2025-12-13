@@ -588,6 +588,83 @@ export const WALMART_DEFAULT_MAPPING_RULES: DefaultMappingConfig[] = [
     mappingType: 'enum_select',
     value: 'No',
   },
+
+  // ==================== 原产国 ====================
+  {
+    attributeId: 'countryOfOriginAssembly',
+    attributeName: 'Country of Origin',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'country_of_origin_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 纺织品原产国 ====================
+  {
+    attributeId: 'countryOfOriginTextiles',
+    attributeName: 'Country of Origin- Textiles',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'country_of_origin_textiles_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 税码（加拿大） ====================
+  {
+    attributeId: 'productTaxCode',
+    attributeName: 'Product Tax Code',
+    mappingType: 'default_value',
+    value: 2038710, // Furniture - General 税码
+  },
+
+  // ==================== 附加功能 ====================
+  {
+    attributeId: 'features',
+    attributeName: 'Additional Features',
+    mappingType: 'auto_generate',
+    value: {
+      ruleType: 'features_extract',
+      param: '',
+    },
+  },
+
+  // ==================== 制造商 ====================
+  {
+    attributeId: 'manufacturer',
+    attributeName: 'Manufacturer',
+    mappingType: 'channel_data',
+    value: 'supplier',
+  },
+
+  // ==================== 关键词 ====================
+  {
+    attributeId: 'keywords',
+    attributeName: 'Keywords',
+    mappingType: 'channel_data',
+    value: 'keywords',
+  },
+
+  // ==================== 合规信息（加拿大） ====================
+  {
+    attributeId: 'isChemical',
+    attributeName: 'Contains Chemical',
+    mappingType: 'enum_select',
+    value: 'No',
+  },
+  {
+    attributeId: 'isPesticide',
+    attributeName: 'Contains Pesticide',
+    mappingType: 'enum_select',
+    value: 'No',
+  },
+  {
+    attributeId: 'isAerosol',
+    attributeName: 'Contains Aerosol',
+    mappingType: 'enum_select',
+    value: 'No',
+  },
 ];
 
 /**
