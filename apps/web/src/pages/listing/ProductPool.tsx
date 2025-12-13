@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Table, Button, Space, Input, Select, Tag, Modal, message, Statistic, Row, Col, Image, Popconfirm, TreeSelect, Alert, Tabs, Descriptions, Upload, Radio } from 'antd';
 import { DeleteOutlined, ReloadOutlined, SendOutlined, EyeOutlined, FolderOutlined, RobotOutlined, StopOutlined, UploadOutlined, DownloadOutlined, FileExcelOutlined } from '@ant-design/icons';
-import { productPoolApi, channelApi, shopApi, platformCategoryApi, aiModelApi, aiOptimizeApi, listingApi } from '@/services/api';
+import { productPoolApi, channelApi, shopApi, platformCategoryApi, platformApi, aiModelApi, aiOptimizeApi, listingApi } from '@/services/api';
 import { getProductTypeLabel, getProductTypeColor } from '@/config/standard-fields.config';
 
 // 从 channelAttributes 中提取标准字段值的辅助函数
@@ -250,6 +250,14 @@ export default function ProductPool() {
   const [stats, setStats] = useState({ total: 0 });
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
 
+  // 筛选：平台、国家、类目联动
+  const [platforms, setPlatforms] = useState<any[]>([]);
+  const [filterPlatformId, setFilterPlatformId] = useState<string>('');
+  const [filterCountry, setFilterCountry] = useState<string>('US');
+  const [filterCategoryTreeData, setFilterCategoryTreeData] = useState<any[]>([]);
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('');
+  const [loadingFilterCategories, setLoadingFilterCategories] = useState(false);
+
   // 刊登弹窗
   const [publishModal, setPublishModal] = useState(false);
   const [selectedShop, setSelectedShop] = useState<string>('');
@@ -286,16 +294,18 @@ export default function ProductPool() {
   useEffect(() => {
     loadStats();
     loadData();
-  }, [page, pageSize, channelId]);
+  }, [page, pageSize, channelId, filterCategoryId]);
 
   const loadChannelsAndShops = async () => {
     try {
-      const [channelsRes, shopsRes]: any[] = await Promise.all([
+      const [channelsRes, shopsRes, platformsRes]: any[] = await Promise.all([
         channelApi.list({ pageSize: 100 }),
         shopApi.list({ pageSize: 100 }),
+        platformApi.list({ pageSize: 100 }),
       ]);
       setChannels(channelsRes.data || []);
       setShops(shopsRes.data || []);
+      setPlatforms(platformsRes.data || []);
     } catch (e) {
       console.error(e);
     }
@@ -314,7 +324,13 @@ export default function ProductPool() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res: any = await productPoolApi.list({ page, pageSize, channelId: channelId || undefined, keyword: keyword || undefined });
+      const res: any = await productPoolApi.list({
+        page,
+        pageSize,
+        channelId: channelId || undefined,
+        keyword: keyword || undefined,
+        platformCategoryId: filterCategoryId || undefined,
+      });
       setData(res?.data || []);
       setTotal(res?.total || 0);
     } catch (e: any) {
@@ -331,6 +347,28 @@ export default function ProductPool() {
     loadData();
   };
 
+  // 筛选：当选择平台或国家时，加载对应的类目
+  useEffect(() => {
+    const loadFilterCategories = async () => {
+      if (filterPlatformId && filterCountry) {
+        setLoadingFilterCategories(true);
+        try {
+          const res: any = await platformCategoryApi.getCategoryTree(filterPlatformId, filterCountry);
+          const treeData = convertToTreeSelectData(res || []);
+          setFilterCategoryTreeData(treeData);
+        } catch (e) {
+          console.error(e);
+          setFilterCategoryTreeData([]);
+        } finally {
+          setLoadingFilterCategories(false);
+        }
+      } else {
+        setFilterCategoryTreeData([]);
+        setFilterCategoryId('');
+      }
+    };
+    loadFilterCategories();
+  }, [filterPlatformId, filterCountry]);
 
   // 当选择店铺时，加载对应平台的类目
   useEffect(() => {
@@ -743,6 +781,47 @@ export default function ProductPool() {
             allowClear
             options={channels.map(c => ({ value: c.id, label: c.name }))}
           />
+          <Select
+            placeholder="选择平台"
+            style={{ width: 150 }}
+            value={filterPlatformId || undefined}
+            onChange={v => {
+              setFilterPlatformId(v || '');
+              setFilterCategoryId('');
+            }}
+            allowClear
+            options={platforms.map(p => ({ value: p.id, label: p.name }))}
+          />
+          {filterPlatformId && (
+            <Select
+              placeholder="选择国家"
+              style={{ width: 130 }}
+              value={filterCountry}
+              onChange={v => {
+                setFilterCountry(v);
+                setFilterCategoryId('');
+              }}
+              options={[
+                { value: 'US', label: '🇺🇸 美国 (US)' },
+                { value: 'CA', label: '🇨🇦 加拿大 (CA)' },
+                { value: 'MX', label: '🇲🇽 墨西哥 (MX)' },
+              ]}
+            />
+          )}
+          {filterPlatformId && (
+            <TreeSelect
+              placeholder="选择平台类目"
+              style={{ width: 200 }}
+              value={filterCategoryId || undefined}
+              onChange={v => setFilterCategoryId(v || '')}
+              treeData={filterCategoryTreeData}
+              loading={loadingFilterCategories}
+              showSearch
+              treeNodeFilterProp="title"
+              dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
+              allowClear
+            />
+          )}
           <Input.Search
             placeholder="搜索 SKU 或标题"
             value={keyword}
@@ -892,7 +971,7 @@ export default function ProductPool() {
                 style={{ width: '100%' }}
                 value={selectedAiModel || undefined}
                 onChange={setSelectedAiModel}
-                options={aiModels.map(m => ({ value: m.id, label: `${m.name} (${m.modelName})` }))}
+                options={aiModels.map(m => ({ value: m.id, label: `${m.name}${m.defaultModel ? ` (${m.defaultModel})` : ''}` }))}
               />
             </div>
             <div style={{ marginBottom: 16 }}>
@@ -904,9 +983,10 @@ export default function ProductPool() {
                 value={selectedFields}
                 onChange={setSelectedFields}
                 options={[
-                  { value: 'title', label: '标题' },
-                  { value: 'description', label: '描述' },
-                  { value: 'bulletPoints', label: '五点描述' },
+                  { value: 'title', label: '标题 (title)' },
+                  { value: 'description', label: '商品描述 (description)' },
+                  { value: 'bulletPoints', label: '五点描述 (bulletPoints)' },
+                  { value: 'keywords', label: '搜索关键词 (keywords)' },
                 ]}
               />
             </div>
@@ -920,8 +1000,15 @@ export default function ProductPool() {
         ) : (
           <div>
             <Alert message="优化完成！请查看结果并决定是否应用。" type="success" showIcon style={{ marginBottom: 16 }} />
-            {optimizeResults.map((result: any, index: number) => (
-              <Card key={index} size="small" title={`${result.field === 'title' ? '标题' : result.field === 'description' ? '描述' : '五点描述'}`} style={{ marginBottom: 12 }}>
+            {optimizeResults.map((result: any, index: number) => {
+              const fieldLabels: Record<string, string> = {
+                title: '标题',
+                description: '商品描述',
+                bulletPoints: '五点描述',
+                keywords: '搜索关键词',
+              };
+              return (
+              <Card key={index} size="small" title={fieldLabels[result.field] || result.field} style={{ marginBottom: 12 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ color: '#666', fontSize: 12 }}>原始内容：</div>
                   <div style={{ background: '#f5f5f5', padding: 8, borderRadius: 4, maxHeight: 100, overflow: 'auto' }}>
@@ -935,7 +1022,8 @@ export default function ProductPool() {
                   </div>
                 </div>
               </Card>
-            ))}
+            );
+            })}
           </div>
         )}
       </Modal>

@@ -19,6 +19,7 @@ export class ProductPoolController {
     @Query('channelId') channelId?: string,
     @Query('keyword') keyword?: string,
     @Query('sku') sku?: string,
+    @Query('platformCategoryId') platformCategoryId?: string,
   ) {
     return this.productPoolService.list({
       page: page ? parseInt(page, 10) : 1,
@@ -26,6 +27,7 @@ export class ProductPoolController {
       channelId,
       keyword,
       sku,
+      platformCategoryId,
     });
   }
 

@@ -47,9 +47,31 @@ export default function AiModels() {
   const [fetchingModels, setFetchingModels] = useState(false);
 
   useEffect(() => {
-    loadChannels();
-    loadAllModels();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [channelsData, modelsData]: any[] = await Promise.all([
+        aiModelApi.list(),
+        aiModelApi.getAllModels(),
+      ]);
+      setChannels(channelsData || []);
+      setAllModels(modelsData || []);
+      
+      // 找到默认的渠道和模型
+      const defaultChannel = (channelsData || []).find((c: any) => c.isDefault);
+      if (defaultChannel?.defaultModel) {
+        const key = `${defaultChannel.id}|${defaultChannel.defaultModel}`;
+        setDefaultModelId(key);
+      }
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadChannels = async () => {
     setLoading(true);
@@ -60,21 +82,6 @@ export default function AiModels() {
       message.error(e.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadAllModels = async () => {
-    try {
-      const data: any = await aiModelApi.getAllModels();
-      setAllModels(data);
-      // 找到默认的
-      const defaultChannel = channels.find((c: any) => c.isDefault);
-      if (defaultChannel?.defaultModel) {
-        const key = `${defaultChannel.id}|${defaultChannel.defaultModel}`;
-        setDefaultModelId(key);
-      }
-    } catch (e: any) {
-      console.error('加载模型列表失败:', e.message);
     }
   };
 
@@ -116,8 +123,7 @@ export default function AiModels() {
       }
       
       setModalVisible(false);
-      loadChannels();
-      loadAllModels();
+      loadData();
     } catch (e: any) {
       if (e.message) message.error(e.message);
     }
@@ -127,8 +133,7 @@ export default function AiModels() {
     try {
       await aiModelApi.delete(id);
       message.success('删除成功');
-      loadChannels();
-      loadAllModels();
+      loadData();
     } catch (e: any) {
       message.error(e.message);
     }
@@ -159,7 +164,7 @@ export default function AiModels() {
     try {
       await aiModelApi.setDefault(channelId, modelName);
       message.success('默认模型设置成功');
-      loadChannels();
+      loadData();
     } catch (e: any) {
       message.error(e.message);
     }
@@ -171,7 +176,7 @@ export default function AiModels() {
         status: record.status === 'active' ? 'inactive' : 'active',
       });
       message.success('状态更新成功');
-      loadChannels();
+      loadData();
     } catch (e: any) {
       message.error(e.message);
     }

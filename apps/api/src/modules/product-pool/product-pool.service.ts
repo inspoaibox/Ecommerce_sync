@@ -30,13 +30,15 @@ export class ProductPoolService {
     channelId?: string;
     keyword?: string;
     sku?: string;
+    platformCategoryId?: string;
   }) {
-    const { page = 1, pageSize = 20, channelId, keyword, sku } = params;
+    const { page = 1, pageSize = 20, channelId, keyword, sku, platformCategoryId } = params;
     const skip = (page - 1) * pageSize;
 
     const where: any = {};
     if (channelId) where.channelId = channelId;
     if (sku) where.sku = { contains: sku, mode: 'insensitive' };
+    if (platformCategoryId) where.platformCategoryId = platformCategoryId;
     if (keyword) {
       where.OR = [
         { sku: { contains: keyword, mode: 'insensitive' } },

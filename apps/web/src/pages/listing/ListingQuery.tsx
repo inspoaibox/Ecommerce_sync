@@ -25,6 +25,7 @@ export default function ListingQuery() {
   // 平台类目选择
   const [platforms, setPlatforms] = useState<any[]>([]);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('');
+  const [selectedCountry, setSelectedCountry] = useState<string>('US');
   const [categoryTreeData, setCategoryTreeData] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedCategoryInfo, setSelectedCategoryInfo] = useState<any>(null);
@@ -67,30 +68,29 @@ export default function ListingQuery() {
     }
   };
 
-  // 当选择平台时，加载对应的类目
+  // 当选择平台或国家时，加载对应的类目
   useEffect(() => {
-    if (selectedPlatform) {
-      loadCategoriesForPlatform(selectedPlatform);
-    } else {
-      setCategoryTreeData([]);
-      setSelectedCategory('');
-      setSelectedCategoryInfo(null);
-    }
-  }, [selectedPlatform]);
-
-  const loadCategoriesForPlatform = async (platformId: string) => {
-    setLoadingCategories(true);
-    try {
-      const res: any = await platformCategoryApi.getCategoryTree(platformId, 'US');
-      const treeData = convertToTreeSelectData(res || []);
-      setCategoryTreeData(treeData);
-    } catch (e) {
-      console.error(e);
-      setCategoryTreeData([]);
-    } finally {
-      setLoadingCategories(false);
-    }
-  };
+    const loadCategories = async () => {
+      if (selectedPlatform && selectedCountry) {
+        setLoadingCategories(true);
+        try {
+          const res: any = await platformCategoryApi.getCategoryTree(selectedPlatform, selectedCountry);
+          const treeData = convertToTreeSelectData(res || []);
+          setCategoryTreeData(treeData);
+        } catch (e) {
+          console.error(e);
+          setCategoryTreeData([]);
+        } finally {
+          setLoadingCategories(false);
+        }
+      } else {
+        setCategoryTreeData([]);
+        setSelectedCategory('');
+        setSelectedCategoryInfo(null);
+      }
+    };
+    loadCategories();
+  }, [selectedPlatform, selectedCountry]);
 
   const convertToTreeSelectData = (categories: any[]): any[] => {
     return categories.map(cat => ({
@@ -723,24 +723,43 @@ export default function ListingQuery() {
           <div style={{ marginBottom: 8, fontWeight: 500 }}>
             选择平台（可选）
           </div>
-          <Select
-            placeholder="选择目标平台"
-            style={{ width: '100%' }}
-            value={selectedPlatform || undefined}
-            onChange={v => { 
-              setSelectedPlatform(v || ''); 
-              setSelectedCategory(''); 
-              setSelectedCategoryInfo(null); 
-            }}
-            allowClear
-            options={platforms.map(p => ({ value: p.id, label: p.name }))}
-          />
+          <Space style={{ width: '100%' }}>
+            <Select
+              placeholder="选择目标平台"
+              style={{ width: 200 }}
+              value={selectedPlatform || undefined}
+              onChange={v => { 
+                setSelectedPlatform(v || ''); 
+                setSelectedCategory(''); 
+                setSelectedCategoryInfo(null); 
+              }}
+              allowClear
+              options={platforms.map(p => ({ value: p.id, label: p.name }))}
+            />
+            {selectedPlatform && (
+              <Select
+                placeholder="选择国家/地区"
+                style={{ width: 150 }}
+                value={selectedCountry}
+                onChange={v => { 
+                  setSelectedCountry(v); 
+                  setSelectedCategory(''); 
+                  setSelectedCategoryInfo(null); 
+                }}
+                options={[
+                  { value: 'US', label: '🇺🇸 美国 (US)' },
+                  { value: 'CA', label: '🇨🇦 加拿大 (CA)' },
+                  { value: 'MX', label: '🇲🇽 墨西哥 (MX)' },
+                ]}
+              />
+            )}
+          </Space>
         </div>
 
         {selectedPlatform && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ marginBottom: 8, fontWeight: 500 }}>
-              平台类目（可选）
+              平台类目（可选）- {selectedCountry === 'US' ? '美国' : selectedCountry === 'CA' ? '加拿大' : '墨西哥'}
             </div>
             <TreeSelect
               placeholder="选择平台类目（只能选择叶子类目）"

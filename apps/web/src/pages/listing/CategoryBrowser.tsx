@@ -61,7 +61,7 @@ const AUTO_GENERATE_RULES: Record<string, { name: string; description: string }>
   date_offset_years: { name: '日期偏移（年）', description: '基于当前日期偏移指定年数，如10表示往后10年' },
   country_of_origin_extract: { name: '智能提取原产国', description: '优先从placeOfOrigin字段匹配，默认CN - China' },
   country_of_origin_textiles_extract: { name: '智能提取纺织品原产国', description: '优先从placeOfOrigin字段匹配，美国返回USA，其他返回Imported' },
-  features_extract: { name: '智能提取附加功能', description: '从描述和五点描述中提取产品特色功能，返回数组格式' },
+  features_extract: { name: '智能提取附加功能', description: '从标题/描述/五点描述提取功能性特征，如Storage Included、USB Charging、Adjustable Height、Soft-Close等，排除颜色/材质/风格，返回数组格式，兜底Standard Features' },
   finish_extract: { name: '智能提取表面处理', description: '从描述/材质/颜色提取表面处理方式，如Glossy、Matte、Polished等，默认New' },
   is_temperature_sensitive_extract: { name: '智能提取温度敏感', description: '从描述判断是否需要特殊温度存储，检测refrigerate/frozen/perishable等关键词，默认No' },
   size_extract: { name: '智能提取产品尺寸', description: '从dimensions/overallDimensions或描述提取整体尺寸，格式L x W x H，无则留空' },

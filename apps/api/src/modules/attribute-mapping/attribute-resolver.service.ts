@@ -504,71 +504,382 @@ export class AttributeResolverService {
   }
 
   /**
-   * 提取附加功能/特色
-   * 使用 NLP 从描述中智能提取产品的功能特性，返回数组格式
+   * 提取附加功能/特色（Additional Features）
+   * 从标题、描述、五点描述中提取功能性或结构性特征
+   * 排除颜色、尺寸、材质、风格等已在其他字段表达的内容
+   * 返回数组格式，最多15个特征
    */
   private extractFeatures(channelAttributes: Record<string, any>): string[] {
     const features: Set<string> = new Set();
     const title = getNestedValue(channelAttributes, 'title') || '';
     const rawDescription = getNestedValue(channelAttributes, 'description') || '';
-    
-    // 清理 HTML 标签和 CSS 样式
+    const bulletPoints = getNestedValue(channelAttributes, 'bulletPoints') || [];
+
+    // 清理 HTML 标签
     const description = this.stripHtmlTags(rawDescription);
-    const text = `${title} ${description}`;
+    const bullets = Array.isArray(bulletPoints) ? bulletPoints.join(' ') : '';
+    const text = `${title} ${description} ${bullets}`;
+    const lowerText = text.toLowerCase();
 
     if (!text.trim()) {
-      return [];
+      return ['Standard Features'];
     }
 
-    const doc = nlp(text);
+    // ==================== 预置特征词典（按类别分组） ====================
 
-    // 1. 提取形容词+名词短语（如 "adjustable height", "ergonomic design"）
-    const adjNouns = doc.match('#Adjective #Noun').out('array') as string[];
-    adjNouns.forEach((phrase: string) => {
-      const cleaned = phrase.trim();
-      if (cleaned.length > 3 && cleaned.length < 50) {
-        // 首字母大写
-        features.add(cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
-      }
-    });
+    // 存储功能
+    const storageFeatures: Record<string, string> = {
+      'storage included': 'Storage Included',
+      'with storage': 'Storage Included',
+      'built-in storage': 'Built-in Storage',
+      'hidden storage': 'Hidden Storage',
+      'with drawers': 'With Drawers',
+      'drawer storage': 'Drawer Storage',
+      'with shelves': 'With Shelves',
+      'shelf storage': 'Shelf Storage',
+      'with cabinet': 'With Cabinet',
+      'cabinet storage': 'Cabinet Storage',
+      'with compartments': 'With Compartments',
+      'storage compartment': 'Storage Compartment',
+      'under-bed storage': 'Under-Bed Storage',
+      'underbed storage': 'Under-Bed Storage',
+      'ottoman storage': 'Ottoman Storage',
+      'lift-top storage': 'Lift-Top Storage',
+      'lift top storage': 'Lift-Top Storage',
+    };
 
-    // 2. 提取带有功能性动词的短语（如 "folds flat", "reclines back"）
-    const verbPhrases = doc.match('(#Verb|#Gerund) (#Adverb|#Adjective|#Noun)?').out('array') as string[];
-    const functionalVerbs = ['fold', 'recline', 'adjust', 'rotate', 'swivel', 'tilt', 'extend', 'expand', 'convert', 'store'];
-    verbPhrases.forEach((phrase: string) => {
-      const lower = phrase.toLowerCase();
-      if (functionalVerbs.some(v => lower.includes(v))) {
-        features.add(phrase.charAt(0).toUpperCase() + phrase.slice(1).trim());
-      }
-    });
+    // 电子/充电功能
+    const electronicFeatures: Record<string, string> = {
+      'usb charging': 'USB Charging Port',
+      'usb port': 'USB Charging Port',
+      'usb-c': 'USB-C Port',
+      'usb c port': 'USB-C Port',
+      'power outlet': 'Power Outlet',
+      'electrical outlet': 'Electrical Outlet',
+      'built-in outlet': 'Built-in Outlet',
+      'led light': 'LED Lighting',
+      'led lighting': 'LED Lighting',
+      'built-in light': 'Built-in Lighting',
+      'touch light': 'Touch-Activated Lighting',
+      'motion sensor': 'Motion Sensor',
+      'bluetooth speaker': 'Bluetooth Speaker',
+      'wireless charging': 'Wireless Charging',
+    };
 
-    // 3. 提取复合名词（如 "cup holder", "USB port", "lumbar support"）
-    const compoundNouns = doc.match('#Noun #Noun').out('array') as string[];
-    compoundNouns.forEach((phrase: string) => {
-      const cleaned = phrase.trim();
-      if (cleaned.length > 5 && cleaned.length < 40) {
-        features.add(cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
-      }
-    });
+    // 可调节功能
+    const adjustableFeatures: Record<string, string> = {
+      'adjustable height': 'Adjustable Height',
+      'height adjustable': 'Adjustable Height',
+      'adjustable headrest': 'Adjustable Headrest',
+      'adjustable armrest': 'Adjustable Armrests',
+      'adjustable arms': 'Adjustable Armrests',
+      'adjustable back': 'Adjustable Backrest',
+      'adjustable lumbar': 'Adjustable Lumbar Support',
+      'adjustable tilt': 'Adjustable Tilt',
+      'adjustable angle': 'Adjustable Angle',
+      'adjustable legs': 'Adjustable Legs',
+      'adjustable feet': 'Adjustable Feet',
+      'adjustable shelf': 'Adjustable Shelves',
+      'adjustable shelves': 'Adjustable Shelves',
+      'multi-position': 'Multi-Position Adjustable',
+      'multiple positions': 'Multi-Position Adjustable',
+    };
 
-    // 4. 关键功能词直接匹配（作为补充）
-    const keyFeatures = [
-      'waterproof', 'water-resistant', 'stain-resistant', 'scratch-resistant',
-      'rust-resistant', 'anti-slip', 'non-slip', 'ergonomic', 'portable',
-      'lightweight', 'foldable', 'collapsible', 'adjustable', 'removable',
-      'reversible', 'convertible', 'modular', 'stackable', 'breathable',
+    // 运动/旋转功能
+    const motionFeatures: Record<string, string> = {
+      'reclining': 'Reclining',
+      'reclines': 'Reclining',
+      'recliner': 'Reclining',
+      'swivel': 'Swivel',
+      '360 swivel': '360° Swivel',
+      '360 degree swivel': '360° Swivel',
+      'rotating': 'Rotating',
+      'rotates': 'Rotating',
+      'tilt function': 'Tilt Function',
+      'tilting': 'Tilt Function',
+      'rocking': 'Rocking',
+      'gliding': 'Gliding',
+      'glider': 'Gliding',
+      'lift mechanism': 'Lift Mechanism',
+      'gas lift': 'Gas Lift',
+      'hydraulic lift': 'Hydraulic Lift',
+    };
+
+    // 轮子/移动功能
+    const mobilityFeatures: Record<string, string> = {
+      'locking casters': 'Locking Casters',
+      'lockable casters': 'Locking Casters',
+      'swivel casters': 'Swivel Casters',
+      'smooth rolling': 'Smooth Rolling Casters',
+      'easy to move': 'Easy to Move',
+      'portable': 'Portable',
+      'lightweight': 'Lightweight',
+      'easy transport': 'Easy to Transport',
+    };
+
+    // 五金/铰链功能
+    const hardwareFeatures: Record<string, string> = {
+      'soft-close': 'Soft-Close',
+      'soft close': 'Soft-Close',
+      'slow close': 'Soft-Close',
+      'soft-close hinges': 'Soft-Close Hinges',
+      'soft-close drawers': 'Soft-Close Drawers',
+      'push-to-open': 'Push-to-Open',
+      'push to open': 'Push-to-Open',
+      'touch latch': 'Touch Latch',
+      'magnetic closure': 'Magnetic Closure',
+      'self-closing': 'Self-Closing',
+    };
+
+    // 防护/耐用功能
+    const protectionFeatures: Record<string, string> = {
+      'water resistant': 'Water Resistant',
+      'water-resistant': 'Water Resistant',
+      'waterproof': 'Waterproof',
+      'weather resistant': 'Weather Resistant',
+      'weather-resistant': 'Weather Resistant',
+      'uv resistant': 'UV Resistant',
+      'uv-resistant': 'UV Resistant',
+      'fade resistant': 'Fade Resistant',
+      'fade-resistant': 'Fade Resistant',
+      'stain resistant': 'Stain Resistant',
+      'stain-resistant': 'Stain Resistant',
+      'scratch resistant': 'Scratch Resistant',
+      'scratch-resistant': 'Scratch Resistant',
+      'rust resistant': 'Rust Resistant',
+      'rust-resistant': 'Rust Resistant',
+      'rust-proof': 'Rust-Proof',
+      'anti-rust': 'Anti-Rust',
+      'corrosion resistant': 'Corrosion Resistant',
+      'heat resistant': 'Heat Resistant',
+      'fire resistant': 'Fire Resistant',
+      'fire-retardant': 'Fire Retardant',
+      'anti-tip': 'Anti-Tip',
+      'tip-over restraint': 'Tip-Over Restraint',
+    };
+
+    // 安全功能
+    const safetyFeatures: Record<string, string> = {
+      'child safe': 'Child Safe',
+      'child-safe': 'Child Safe',
+      'childproof': 'Childproof',
+      'safety lock': 'Safety Lock',
+      'locking mechanism': 'Locking Mechanism',
+      'anti-slip': 'Anti-Slip',
+      'non-slip': 'Non-Slip',
+      'non slip': 'Non-Slip',
+      'slip resistant': 'Slip Resistant',
+      'rounded corners': 'Rounded Corners',
+      'rounded edges': 'Rounded Edges',
+      'safety strap': 'Safety Strap',
+      'wall anchor': 'Wall Anchor Included',
+      'anchoring kit': 'Wall Anchor Included',
+    };
+
+    // 舒适功能
+    const comfortFeatures: Record<string, string> = {
+      'lumbar support': 'Lumbar Support',
+      'ergonomic': 'Ergonomic Design',
+      'ergonomic design': 'Ergonomic Design',
+      'padded seat': 'Padded Seat',
+      'padded armrest': 'Padded Armrests',
+      'padded headrest': 'Padded Headrest',
+      'memory foam': 'Memory Foam',
+      'high-density foam': 'High-Density Foam',
+      'pocket springs': 'Pocket Springs',
+      'breathable': 'Breathable',
+      'breathable mesh': 'Breathable Mesh',
+      'ventilated': 'Ventilated',
+      'cooling gel': 'Cooling Gel',
+      'temperature regulating': 'Temperature Regulating',
+    };
+
+    // 结构/组合功能
+    const structureFeatures: Record<string, string> = {
+      'stackable': 'Stackable',
+      'nesting': 'Nesting',
+      'nestable': 'Nesting',
+      'expandable': 'Expandable',
+      'extendable': 'Extendable',
+      'extension leaf': 'Extension Leaf',
+      'drop leaf': 'Drop Leaf',
+      'butterfly leaf': 'Butterfly Leaf',
+      'convertible': 'Convertible',
+      'multi-functional': 'Multi-Functional',
+      'multifunctional': 'Multi-Functional',
+      'multi-purpose': 'Multi-Purpose',
+      'multipurpose': 'Multi-Purpose',
+      'modular': 'Modular',
+      'sectional': 'Sectional',
+      'reversible': 'Reversible',
+      'reversible chaise': 'Reversible Chaise',
+      'detachable': 'Detachable',
+      'removable': 'Removable',
+      'removable cushion': 'Removable Cushions',
+      'removable cover': 'Removable Cover',
+      'washable cover': 'Washable Cover',
+      'machine washable': 'Machine Washable Cover',
+    };
+
+    // 折叠功能
+    const foldingFeatures: Record<string, string> = {
+      'foldable': 'Foldable',
+      'folding': 'Foldable',
+      'folds flat': 'Folds Flat',
+      'fold flat': 'Folds Flat',
+      'collapsible': 'Collapsible',
+      'space-saving': 'Space-Saving',
+      'space saving': 'Space-Saving',
+      'compact storage': 'Compact Storage',
+      'easy storage': 'Easy Storage',
+    };
+
+    // 组装功能
+    const assemblyFeatures: Record<string, string> = {
+      'easy assembly': 'Easy Assembly',
+      'tool-free assembly': 'Tool-Free Assembly',
+      'no tools required': 'No Tools Required',
+      'quick assembly': 'Quick Assembly',
+      'pre-assembled': 'Pre-Assembled',
+      'fully assembled': 'Fully Assembled',
+      'minimal assembly': 'Minimal Assembly',
+    };
+
+    // 床/床垫功能
+    const bedFeatures: Record<string, string> = {
+      'trundle': 'Trundle Bed',
+      'trundle bed': 'Trundle Bed',
+      'pull-out bed': 'Pull-Out Bed',
+      'bunk bed': 'Bunk Bed',
+      'loft bed': 'Loft Bed',
+      'daybed': 'Daybed',
+      'murphy bed': 'Murphy Bed',
+      'wall bed': 'Wall Bed',
+      'sofa bed': 'Sofa Bed',
+      'sleeper sofa': 'Sleeper Sofa',
+      'futon': 'Futon',
+      'box spring required': 'Box Spring Required',
+      'no box spring': 'No Box Spring Needed',
+      'bunkie board': 'Bunkie Board Compatible',
+      'slat system': 'Slat System',
+      'center support': 'Center Support',
+      'headboard included': 'Headboard Included',
+      'footboard included': 'Footboard Included',
+    };
+
+    // 桌子功能
+    const tableFeatures: Record<string, string> = {
+      'lift top': 'Lift-Top',
+      'lift-top': 'Lift-Top',
+      'flip top': 'Flip-Top',
+      'flip-top': 'Flip-Top',
+      'glass top': 'Glass Top',
+      'tempered glass': 'Tempered Glass',
+      'cable management': 'Cable Management',
+      'wire management': 'Wire Management',
+      'grommet hole': 'Grommet Hole',
+      'keyboard tray': 'Keyboard Tray',
+      'monitor stand': 'Monitor Stand',
+      'cup holder': 'Cup Holder',
+      'drink holder': 'Cup Holder',
+    };
+
+    // 户外功能
+    const outdoorFeatures: Record<string, string> = {
+      'all-weather': 'All-Weather',
+      'all weather': 'All-Weather',
+      'outdoor use': 'Outdoor Use',
+      'indoor/outdoor': 'Indoor/Outdoor Use',
+      'patio': 'Patio Use',
+      'garden': 'Garden Use',
+      'poolside': 'Poolside Use',
+      'quick dry': 'Quick Dry',
+      'quick-dry': 'Quick Dry',
+      'mildew resistant': 'Mildew Resistant',
+    };
+
+    // 合并所有特征词典
+    const allFeatureDicts = [
+      storageFeatures, electronicFeatures, adjustableFeatures, motionFeatures,
+      mobilityFeatures, hardwareFeatures, protectionFeatures, safetyFeatures,
+      comfortFeatures, structureFeatures, foldingFeatures, assemblyFeatures,
+      bedFeatures, tableFeatures, outdoorFeatures,
     ];
-    const lowerText = text.toLowerCase();
-    keyFeatures.forEach(kw => {
-      if (lowerText.includes(kw)) {
-        features.add(kw.charAt(0).toUpperCase() + kw.slice(1).replace(/-/g, ' '));
-      }
-    });
 
-    // 返回数组，最多10个特性，过滤掉太短或无意义的
+    // ==================== 特征提取 ====================
+
+    // 1. 从预置词典匹配
+    for (const dict of allFeatureDicts) {
+      for (const [keyword, feature] of Object.entries(dict)) {
+        if (lowerText.includes(keyword)) {
+          features.add(feature);
+        }
+      }
+    }
+
+    // 2. 使用 NLP 提取额外的功能性短语
+    if (features.size < 10) {
+      try {
+        const doc = nlp(text);
+
+        // 提取 "with X" 模式（如 "with USB ports", "with storage"）
+        const withPhrases = doc.match('with #Noun+').out('array') as string[];
+        withPhrases.forEach((phrase: string) => {
+          const cleaned = phrase.trim();
+          if (cleaned.length > 6 && cleaned.length < 40 && !this.isExcludedFeature(cleaned)) {
+            features.add(this.capitalizeFirst(cleaned));
+          }
+        });
+
+        // 提取 "X included" 模式
+        const includedPhrases = doc.match('#Noun+ included').out('array') as string[];
+        includedPhrases.forEach((phrase: string) => {
+          const cleaned = phrase.trim();
+          if (cleaned.length > 6 && cleaned.length < 40 && !this.isExcludedFeature(cleaned)) {
+            features.add(this.capitalizeFirst(cleaned));
+          }
+        });
+      } catch {
+        // NLP 解析失败，继续使用已提取的特征
+      }
+    }
+
+    // 3. 如果仍然没有特征，返回通用默认值
+    if (features.size === 0) {
+      return ['Standard Features'];
+    }
+
+    // 返回数组，最多15个特性，去重并排序
     return Array.from(features)
       .filter(f => f.length > 3 && !/^\d+$/.test(f))
-      .slice(0, 10);
+      .slice(0, 15);
+  }
+
+  /**
+   * 检查是否为应排除的特征（颜色、尺寸、材质、风格等）
+   */
+  private isExcludedFeature(text: string): boolean {
+    const lower = text.toLowerCase();
+    const excludePatterns = [
+      // 颜色
+      'black', 'white', 'gray', 'grey', 'brown', 'beige', 'blue', 'red', 'green',
+      // 材质
+      'wood', 'metal', 'fabric', 'leather', 'velvet', 'linen', 'cotton',
+      // 风格
+      'modern', 'contemporary', 'traditional', 'rustic', 'farmhouse', 'industrial style',
+      // 营销词
+      'high quality', 'perfect for', 'great for', 'ideal for', 'best for',
+      // 尺寸
+      'inch', 'inches', 'cm', 'feet', 'foot',
+    ];
+    return excludePatterns.some(p => lower.includes(p));
+  }
+
+  /**
+   * 首字母大写
+   */
+  private capitalizeFirst(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   /**

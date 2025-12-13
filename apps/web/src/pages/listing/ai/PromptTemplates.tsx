@@ -14,22 +14,22 @@ const TEMPLATE_TYPES = [
   { value: 'general', label: '通用', color: 'default' },
 ];
 
-// 可用变量
+// 可用变量 - 与后端 optimization.service.ts 中的 extractVariables 保持一致
 const VARIABLES = [
   // 汇总信息（推荐使用，AI可获取完整商品信息）
-  { name: 'productSummary', description: '★ 商品完整信息汇总（推荐）' },
-  { name: 'allCustomAttributes', description: '★ 所有渠道属性汇总' },
-  // 基础信息
+  { name: 'productSummary', description: '★ 商品完整信息汇总（推荐，包含所有基础信息和渠道属性）', highlight: true },
+  { name: 'allCustomAttributes', description: '★ 所有渠道自定义属性汇总', highlight: true },
+  // 基础信息（来自 channelAttributes 标准字段）
   { name: 'title', description: '商品标题' },
   { name: 'sku', description: 'SKU' },
-  { name: 'color', description: '商品颜色' },
-  { name: 'material', description: '商品材质' },
-  { name: 'description', description: '商品描述' },
-  { name: 'bulletPoints', description: '五点描述' },
-  { name: 'keywords', description: '搜索关键词' },
-  // 尺寸
-  { name: 'productDimensions', description: '产品尺寸（长x宽x高, 重量）' },
-  { name: 'packageDimensions', description: '包装尺寸（长x宽x高, 重量）' },
+  { name: 'color', description: '颜色' },
+  { name: 'material', description: '材质' },
+  { name: 'description', description: '商品描述（HTML格式）' },
+  { name: 'bulletPoints', description: '五点描述（逗号分隔）' },
+  { name: 'keywords', description: '搜索关键词（逗号分隔）' },
+  // 尺寸信息
+  { name: 'productDimensions', description: '产品尺寸（长x宽x高 in, 重量 lb）' },
+  { name: 'packageDimensions', description: '包装尺寸（长x宽x高 in, 重量 lb）' },
 ];
 
 export default function PromptTemplates() {
@@ -245,12 +245,16 @@ export default function PromptTemplates() {
               </Select>
             </Form.Item>
           )}
-          <Form.Item label="可用变量">
+          <Form.Item label="可用变量（点击插入）">
+            <div style={{ marginBottom: 8, color: '#666', fontSize: 12 }}>
+              推荐使用 productSummary 和 allCustomAttributes，AI 可获取完整商品信息生成更好的内容
+            </div>
             <Space wrap>
               {VARIABLES.map(v => (
                 <Tag
                   key={v.name}
-                  style={{ cursor: 'pointer' }}
+                  color={(v as any).highlight ? 'blue' : 'default'}
+                  style={{ cursor: 'pointer', marginBottom: 4 }}
                   onClick={() => insertVariable(v.name)}
                 >
                   {`{{${v.name}}}`} - {v.description}

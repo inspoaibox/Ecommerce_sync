@@ -1,6 +1,19 @@
 /**
  * Default Prompt Templates for E-commerce Product Optimization
  * Designed for Walmart, Amazon, and other US marketplaces
+ * 
+ * 可用变量（来自 optimization.service.ts 的 extractVariables）：
+ * - productSummary: 商品完整信息汇总（推荐使用）
+ * - allCustomAttributes: 所有渠道自定义属性汇总
+ * - title: 商品标题
+ * - sku: SKU
+ * - color: 颜色
+ * - material: 材质
+ * - description: 商品描述
+ * - bulletPoints: 五点描述（逗号分隔）
+ * - keywords: 搜索关键词（逗号分隔）
+ * - productDimensions: 产品尺寸（长x宽x高 in, 重量 lb）
+ * - packageDimensions: 包装尺寸（长x宽x高 in, 重量 lb）
  */
 
 export const DEFAULT_TEMPLATES = [
@@ -17,11 +30,8 @@ Based on the following complete product information, generate an optimized produ
 === ORIGINAL TITLE ===
 {{title}}
 
-=== PRODUCT DESCRIPTION ===
-{{description}}
-
-=== KEY FEATURES ===
-{{characteristics}}
+=== PRODUCT DIMENSIONS ===
+{{productDimensions}}
 
 === ADDITIONAL ATTRIBUTES ===
 {{allCustomAttributes}}
@@ -55,8 +65,8 @@ Based on the following complete product information, generate 5 compelling bulle
 === PRODUCT DESCRIPTION ===
 {{description}}
 
-=== KEY FEATURES ===
-{{characteristics}}
+=== PRODUCT DIMENSIONS ===
+{{productDimensions}}
 
 === EXISTING BULLET POINTS ===
 {{bulletPoints}}
@@ -95,8 +105,8 @@ Based on the following complete product information, generate an optimized produ
 === ORIGINAL DESCRIPTION ===
 {{description}}
 
-=== KEY FEATURES ===
-{{characteristics}}
+=== PRODUCT DIMENSIONS ===
+{{productDimensions}}
 
 === EXISTING BULLET POINTS ===
 {{bulletPoints}}
@@ -134,8 +144,9 @@ Based on the following complete product information, extract 10-15 search keywor
 === PRODUCT DESCRIPTION ===
 {{description}}
 
-=== KEY FEATURES ===
-{{characteristics}}
+=== MATERIAL & COLOR ===
+Material: {{material}}
+Color: {{color}}
 
 === EXISTING KEYWORDS ===
 {{keywords}}
@@ -171,8 +182,12 @@ Based on the following complete furniture product information, generate an optim
 === ORIGINAL TITLE ===
 {{title}}
 
-=== KEY FEATURES ===
-{{characteristics}}
+=== MATERIAL & COLOR ===
+Material: {{material}}
+Color: {{color}}
+
+=== PRODUCT DIMENSIONS ===
+{{productDimensions}}
 
 === ADDITIONAL ATTRIBUTES ===
 {{allCustomAttributes}}
@@ -206,8 +221,12 @@ Based on the following complete furniture product information, generate 5 compel
 === PRODUCT DESCRIPTION ===
 {{description}}
 
-=== KEY FEATURES ===
-{{characteristics}}
+=== MATERIAL & COLOR ===
+Material: {{material}}
+Color: {{color}}
+
+=== PRODUCT DIMENSIONS ===
+{{productDimensions}}
 
 === EXISTING BULLET POINTS ===
 {{bulletPoints}}
