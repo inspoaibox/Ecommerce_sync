@@ -226,8 +226,8 @@ pnpm exec ts-node -r tsconfig-paths/register scripts/test-single-field.ts countr
 | `items_included_extract` | 包含物品列表 | string[] |
 | `features_extract` | 附加功能列表（NLP提取） | string[] |
 | `pattern_extract` | 图案/花纹 | string[] |
-| `country_of_origin_extract` | 原产国（XX - Country格式） | string |
-| `country_of_origin_textiles_extract` | 纺织品原产国 | string |
+| `country_of_origin_extract` | 原产国，优先从placeOfOrigin匹配，默认CN - China | string |
+| `country_of_origin_textiles_extract` | 纺织品原产国，优先从placeOfOrigin匹配，美国返回USA，其他返回Imported | string |
 | `max_load_weight_extract` | 最大承重 | object |
 | `leg_color_extract` | 腿部颜色 | string |
 | `leg_material_extract` | 腿部材料 | string |
@@ -381,3 +381,83 @@ pnpm exec ts-node -r tsconfig-paths/register scripts/test-single-field.ts countr
 
 ⏱️  耗时: 5ms
 ```
+
+## 规则详细说明
+
+### 原产国相关规则
+
+#### country_of_origin_extract
+- **用途**: 提取原产国（Walmart US 格式）
+- **返回格式**: `XX - Country Name`（如 `CN - China`）
+- **提取逻辑**:
+  1. 优先从 `placeOfOrigin` 字段匹配
+  2. 支持中英文国家名称匹配
+  3. 默认返回 `CN - China`
+- **枚举值示例**: `CN - China`, `US - United States`, `VN - Vietnam`
+
+#### country_of_origin_textiles_extract
+- **用途**: 提取纺织品原产国
+- **返回格式**: 枚举值
+- **枚举值**: `USA and Imported`, `Imported`, `USA`, `USA or Imported`
+- **提取逻辑**:
+  1. 优先从 `placeOfOrigin` 字段匹配
+  2. 包含 USA/US/United States → 返回 `USA`
+  3. 同时包含 USA 和进口成分 → 返回 `USA and Imported`
+  4. 其他情况 → 返回 `Imported`（默认）
+
+### 颜色相关规则
+
+#### color_extract
+- **用途**: 提取产品颜色
+- **提取逻辑**:
+  1. 优先从 `color` 字段取值
+  2. 其次从 `customAttributes.colorFamily` 取值
+  3. 最后从标题/描述中提取颜色关键词
+- **支持颜色**: black, white, brown, gray, beige, walnut, oak 等
+
+#### color_category_extract
+- **用途**: 提取颜色分类（Walmart 枚举）
+- **返回格式**: `string[]`
+- **提取逻辑**:
+  1. 从 `color` 字段匹配最接近的 Walmart 颜色枚举
+  2. 支持颜色同义词映射（如 walnut → Brown）
+  3. 默认返回 `Multicolor`
+- **枚举值**: White, Black, Brown, Gray, Beige, Blue, Green, Red, Multicolor 等
+
+### 功能特性规则
+
+#### features_extract
+- **用途**: 提取产品附加功能
+- **返回格式**: `string[]`（最多10个）
+- **提取逻辑**:
+  1. 优先从 `bulletPoints` 提取【】中的内容
+  2. 使用 NLP 从描述中提取形容词+名词短语
+  3. 匹配功能关键词（waterproof, adjustable 等）
+  4. 自动清理 HTML 标签
+
+#### electronics_indicator_extract
+- **用途**: 判断是否含电子元件
+- **返回格式**: `Yes` 或 `No`
+- **提取逻辑**:
+  1. 从标题/描述中匹配电子元件关键词
+  2. 关键词: `usb port`, `led light`, `bluetooth`, `power outlet` 等
+  3. 注意: 避免误匹配 "light luxury"（轻奢）
+  4. 默认返回 `No`
+
+### 家具相关规则
+
+#### items_included_extract
+- **用途**: 提取套装包含物品
+- **返回格式**: `string[]`
+- **提取逻辑**:
+  1. 匹配 "X and Y Set of N" 模式
+  2. 识别同义词并合并（TV Stand = TV Console）
+  3. 无法提取则返回 `undefined`
+
+#### upholstered_extract
+- **用途**: 判断是否软包家具
+- **返回格式**: `Yes` 或 `No`
+- **提取逻辑**:
+  1. 包含 fabric/leather/velvet → `Yes`
+  2. 包含 table/cabinet/desk → `No`
+  3. 默认返回 `No`

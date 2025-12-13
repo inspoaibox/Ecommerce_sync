@@ -60,6 +60,7 @@ const AUTO_GENERATE_RULES: Record<string, { name: string; description: string }>
   date_offset: { name: '日期偏移（天）', description: '基于当前日期偏移指定天数，负数为往前，正数为往后' },
   date_offset_years: { name: '日期偏移（年）', description: '基于当前日期偏移指定年数，如10表示往后10年' },
   country_of_origin_extract: { name: '智能提取原产国', description: '优先从placeOfOrigin字段匹配，默认CN - China' },
+  country_of_origin_textiles_extract: { name: '智能提取纺织品原产国', description: '优先从placeOfOrigin字段匹配，美国返回USA，其他返回Imported' },
   features_extract: { name: '智能提取附加功能', description: '从描述和五点描述中提取产品特色功能，返回数组格式' },
   llm_extract: { name: 'LLM智能提取', description: '使用本地大模型提取属性，参数格式：属性名|提取指令' },
 };
