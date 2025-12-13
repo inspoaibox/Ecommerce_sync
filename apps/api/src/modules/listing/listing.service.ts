@@ -465,9 +465,23 @@ export class ListingService {
             }
           }
           
+          // 查询类目名称（CA 市场 Visible 层级需要使用类目名称而非 categoryId）
+          let categoryName: string | null = null;
+          if (product.platformCategoryId && shop.platformId) {
+            const platformCategory = await this.prisma.platformCategory.findFirst({
+              where: {
+                platformId: shop.platformId,
+                country: shop.region || 'US',
+                categoryId: product.platformCategoryId,
+              },
+              select: { name: true },
+            });
+            categoryName = platformCategory?.name || null;
+          }
+          
           // 将平铺的 platformAttributes 转换为 Walmart V5.0 结构
           // V5.0 结构: { Orderable: {...}, Visible: { [categoryName]: {...} } }
-          const itemData = this.convertToWalmartV5Format(platformAttrs, product.platformCategoryId, walmartConfig);
+          const itemData = this.convertToWalmartV5Format(platformAttrs, product.platformCategoryId, walmartConfig, categoryName);
           
           console.log(`[submitListing] Submitting product: ${product.sku}`);
           
@@ -664,8 +678,9 @@ export class ListingService {
    * - Visible: { [categoryName]: {} } (空对象)
    * 
    * @param platformAttrs 平铺的平台属性
-   * @param categoryId 类目ID（用于 Visible 层级）
+   * @param categoryId 类目ID（用于 Feed Header 的 subCategory）
    * @param shopConfig 店铺配置（备货时间、履行中心、区域等）
+   * @param categoryName 类目名称（用于 Visible 层级的 key，CA 市场必须使用类目名称）
    */
   private convertToWalmartV5Format(
     platformAttrs: Record<string, any>,
@@ -677,6 +692,7 @@ export class ListingService {
       shippingTemplate?: string;
       region?: string;
     },
+    categoryName?: string | null,
   ): Record<string, any> {
     // 如果已经是 V5.0 格式（有 Orderable 或 Visible），直接返回
     if (platformAttrs.Orderable || platformAttrs.Visible) {
@@ -788,7 +804,12 @@ export class ListingService {
     }
 
     // Visible 层级处理
-    const categoryKey = categoryId || 'Default';
+    // CA/国际市场：Visible 的 key 必须是类目名称（如 "Furniture"），而非 categoryId（如 "furniture_other"）
+    // US 市场：Visible 的 key 使用 categoryId（Product Type Name）
+    const categoryKey = isInternational 
+      ? (categoryName || categoryId || 'Default')  // CA 市场优先使用类目名称
+      : (categoryId || 'Default');  // US 市场使用 categoryId
+    
     if (isInternational) {
       // 国际市场：Visible 下的类目对象为空（所有字段都在 Orderable）
       result.Visible = { [categoryKey]: {} };

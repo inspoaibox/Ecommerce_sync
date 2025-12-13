@@ -29,6 +29,13 @@ export class WalmartAdapter extends BasePlatformAdapter {
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
   private regionConfig: WalmartRegionConfig;
+  
+  /**
+   * 认证模式：
+   * - 'oauth': OAuth 2.0 (US 市场，使用 clientId + clientSecret)
+   * - 'signature': 数字签名 (CA/国际市场，使用 consumerId + privateKey)
+   */
+  private authMode: 'oauth' | 'signature';
 
   constructor(credentials: Record<string, any>) {
     super(credentials);
@@ -39,15 +46,26 @@ export class WalmartAdapter extends BasePlatformAdapter {
     // 优先使用 credentials 中指定的 apiBaseUrl，否则使用区域配置
     const baseURL = credentials.apiBaseUrl || this.regionConfig.apiBaseUrl;
     
-    console.log(`[WalmartAdapter] Initialized for region: ${this.regionConfig.region}, baseURL: ${baseURL}`);
+    // 根据凭证类型和区域确定认证模式
+    // CA/国际市场：如果有 consumerId + privateKey，使用数字签名认证
+    // US 市场或有 clientId + clientSecret：使用 OAuth 2.0
+    if (this.regionConfig.region !== 'US' && credentials.consumerId && credentials.privateKey) {
+      this.authMode = 'signature';
+      console.log(`[WalmartAdapter] Using signature auth for region: ${this.regionConfig.region}`);
+    } else {
+      this.authMode = 'oauth';
+      console.log(`[WalmartAdapter] Using OAuth auth for region: ${this.regionConfig.region}`);
+    }
+    
+    console.log(`[WalmartAdapter] Initialized for region: ${this.regionConfig.region}, baseURL: ${baseURL}, authMode: ${this.authMode}`);
     
     this.client = axios.create({
       baseURL,
       timeout: 60000, // 60秒超时
     });
 
-    // 如果已有accessToken，直接使用
-    if (credentials.accessToken) {
+    // 如果已有accessToken，直接使用（仅 OAuth 模式）
+    if (this.authMode === 'oauth' && credentials.accessToken) {
       this.accessToken = credentials.accessToken;
       this.tokenExpiry = Date.now() + 14 * 60 * 1000; // 假设14分钟有效
     }
@@ -65,7 +83,46 @@ export class WalmartAdapter extends BasePlatformAdapter {
     return crypto.randomUUID();
   }
 
-  // 获取访问令牌
+  /**
+   * 生成数字签名（用于 CA/国际市场）
+   * 
+   * 签名格式: consumerId + "\n" + url + "\n" + method + "\n" + timestamp + "\n"
+   * 使用 SHA-256 with RSA 签名，然后 Base64 编码
+   * 
+   * @param url 完整的请求 URL
+   * @param method HTTP 方法（大写）
+   * @param timestamp Unix 时间戳（毫秒）
+   */
+  private generateSignature(url: string, method: string, timestamp: number): string {
+    const { consumerId, privateKey } = this.credentials;
+    
+    if (!consumerId || !privateKey) {
+      throw new Error('CA 市场需要 consumerId 和 privateKey 进行数字签名认证');
+    }
+
+    // 构建签名数据
+    const stringToSign = `${consumerId}\n${url}\n${method}\n${timestamp}\n`;
+    
+    try {
+      // 解码 Base64 编码的私钥
+      const privateKeyPem = privateKey.includes('-----BEGIN')
+        ? privateKey
+        : `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
+      
+      // 使用 SHA-256 with RSA 签名
+      const sign = crypto.createSign('RSA-SHA256');
+      sign.update(stringToSign);
+      sign.end();
+      
+      const signature = sign.sign(privateKeyPem, 'base64');
+      return signature;
+    } catch (error: any) {
+      console.error('[Walmart] Failed to generate signature:', error.message);
+      throw new Error(`生成数字签名失败: ${error.message}`);
+    }
+  }
+
+  // 获取访问令牌（仅 OAuth 模式）
   private async getAccessToken(): Promise<string> {
     // 如果有有效的token，直接返回
     if (this.accessToken && Date.now() < this.tokenExpiry) {
@@ -93,15 +150,24 @@ export class WalmartAdapter extends BasePlatformAdapter {
 
       console.log(`[Walmart] Requesting token for market: ${this.regionConfig.marketCode}, region: ${this.regionConfig.region}`);
       
+      // 构建请求头
+      const tokenHeaders: Record<string, string> = {
+        Authorization: `Basic ${authString}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'WM_MARKET': this.regionConfig.marketCode,  // 区分市场：us, ca, mx, cl
+        'WM_SVC.NAME': 'Walmart Marketplace',
+        'WM_QOS.CORRELATION_ID': this.generateCorrelationId(),
+      };
+      
+      // 非美国市场需要额外的 headers（CA/MX/CL 等国际市场）
+      if (this.regionConfig.region !== 'US') {
+        tokenHeaders['WM_TENANT_ID'] = `WALMART.${this.regionConfig.region}`;  // 如：WALMART.CA
+        tokenHeaders['WM_LOCALE_ID'] = `${this.regionConfig.locale}_${this.regionConfig.region}`;  // 如：en_CA
+      }
+      
       const response = await this.client.post('/v3/token', params.toString(), {
-        headers: {
-          Authorization: `Basic ${authString}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
-          'WM_MARKET': this.regionConfig.marketCode,  // 区分市场：us, ca, mx, cl
-          'WM_SVC.NAME': 'Walmart Marketplace',
-          'WM_QOS.CORRELATION_ID': this.generateCorrelationId(),
-        },
+        headers: tokenHeaders,
       });
 
       console.log(`[Walmart] Token obtained successfully for market: ${this.regionConfig.marketCode}`);
@@ -121,32 +187,55 @@ export class WalmartAdapter extends BasePlatformAdapter {
     }
   }
 
-  // 获取请求头
-  private async getHeaders(): Promise<Record<string, string>> {
-    const token = await this.getAccessToken();
-    
-    // WM_CONSUMER.CHANNEL.TYPE 优先级：
-    // 1. credentials.channelType（用户在店铺配置中指定的 Channel Type Code）
-    // 2. credentials.clientId（OAuth 2.0 模式使用 Client ID）
-    // 3. regionConfig.businessUnit（降级使用业务单元名称）
-    const channelType = this.credentials.channelType || this.credentials.clientId || this.regionConfig.businessUnit;
-    
-    console.log(`[Walmart] getHeaders - channelType: ${channelType}, region: ${this.regionConfig.region}, hasCustomChannelType: ${!!this.credentials.channelType}`);
-    
+  /**
+   * 获取请求头
+   * 
+   * @param endpoint API 端点（用于数字签名模式）
+   * @param method HTTP 方法（用于数字签名模式，默认 GET）
+   */
+  private async getHeaders(endpoint?: string, method: string = 'GET'): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
-      'WM_SEC.ACCESS_TOKEN': token,
-      'WM_MARKET': this.regionConfig.marketCode,  // 区分市场：us, ca, mx, cl
       'WM_SVC.NAME': 'Walmart Marketplace',
       'WM_QOS.CORRELATION_ID': this.generateCorrelationId(),
-      'WM_CONSUMER.CHANNEL.TYPE': channelType,  // 必需：优先使用专门的 Channel Type Code
       'Content-Type': 'application/json',
       Accept: 'application/json',
     };
-    
-    // 非美国市场需要额外的 headers
-    if (this.regionConfig.region !== 'US') {
-      headers['WM_TENANT_ID'] = `WALMART.${this.regionConfig.region}`;  // 如：WALMART.CA
-      headers['WM_LOCALE_ID'] = `${this.regionConfig.locale}_${this.regionConfig.region}`;  // 如：en_CA
+
+    if (this.authMode === 'signature') {
+      // 数字签名认证模式（CA/国际市场）
+      const timestamp = Date.now();
+      const fullUrl = `${this.client.defaults.baseURL}${endpoint || '/v3/feeds'}`;
+      const signature = this.generateSignature(fullUrl, method.toUpperCase(), timestamp);
+      
+      headers['WM_SEC.AUTH_SIGNATURE'] = signature;
+      headers['WM_SEC.TIMESTAMP'] = String(timestamp);
+      headers['WM_CONSUMER.ID'] = this.credentials.consumerId;
+      headers['WM_CONSUMER.CHANNEL.TYPE'] = this.credentials.channelType;
+      headers['WM_TENANT_ID'] = `WALMART.${this.regionConfig.region}`;
+      headers['WM_LOCALE_ID'] = `${this.regionConfig.locale}_${this.regionConfig.region}`;
+      
+      console.log(`[Walmart] getHeaders (signature) - consumerId: ${this.credentials.consumerId?.substring(0, 10)}..., region: ${this.regionConfig.region}`);
+    } else {
+      // OAuth 2.0 认证模式（US 市场）
+      const token = await this.getAccessToken();
+      
+      // WM_CONSUMER.CHANNEL.TYPE 优先级：
+      // 1. credentials.channelType（用户在店铺配置中指定的 Channel Type Code）
+      // 2. credentials.clientId（OAuth 2.0 模式使用 Client ID）
+      // 3. regionConfig.businessUnit（降级使用业务单元名称）
+      const channelType = this.credentials.channelType || this.credentials.clientId || this.regionConfig.businessUnit;
+      
+      headers['WM_SEC.ACCESS_TOKEN'] = token;
+      headers['WM_MARKET'] = this.regionConfig.marketCode;
+      headers['WM_CONSUMER.CHANNEL.TYPE'] = channelType;
+      
+      // 非美国市场需要额外的 headers（如果使用 OAuth 模式）
+      if (this.regionConfig.region !== 'US') {
+        headers['WM_TENANT_ID'] = `WALMART.${this.regionConfig.region}`;
+        headers['WM_LOCALE_ID'] = `${this.regionConfig.locale}_${this.regionConfig.region}`;
+      }
+      
+      console.log(`[Walmart] getHeaders (oauth) - channelType: ${channelType?.substring(0, 10)}..., region: ${this.regionConfig.region}`);
     }
     
     return headers;
@@ -1555,8 +1644,15 @@ export class WalmartAdapter extends BasePlatformAdapter {
    */
   async createItem(item: Record<string, any>, subCategory?: string): Promise<{ feedId: string; walmartResponse?: any; submittedFeedData?: any }> {
     try {
-      const headers = await this.getHeaders();
       const isInternational = this.regionConfig.region !== 'US';
+      const baseEndpoint = this.buildEndpoint('/v3/feeds');
+      
+      // 对于数字签名认证，URL 必须包含查询参数
+      // 签名时使用完整 URL（包含查询参数），请求时也使用完整 URL
+      const endpointWithParams = `${baseEndpoint}?feedType=${this.regionConfig.feedType}`;
+      
+      // 获取请求头（传入完整 endpoint 用于数字签名）
+      const headers = await this.getHeaders(endpointWithParams, 'POST');
 
       // 构建 Feed Header
       let feedHeader: Record<string, any>;
@@ -1597,14 +1693,22 @@ export class WalmartAdapter extends BasePlatformAdapter {
         contentType: 'application/json',
       });
 
-      const endpoint = this.buildEndpoint('/v3/feeds');
-      const response = await this.client.post(endpoint, form, {
+      // 数字签名模式：使用完整 URL（包含查询参数），不使用 params
+      // OAuth 模式：可以使用 params
+      const requestConfig: any = {
         headers: {
           ...headers,
           ...form.getHeaders(),
         },
-        params: { feedType: this.regionConfig.feedType },
-      });
+      };
+      
+      // OAuth 模式使用 params，数字签名模式查询参数已在 URL 中
+      const requestUrl = this.authMode === 'signature' ? endpointWithParams : baseEndpoint;
+      if (this.authMode !== 'signature') {
+        requestConfig.params = { feedType: this.regionConfig.feedType };
+      }
+
+      const response = await this.client.post(requestUrl, form, requestConfig);
 
       return { 
         feedId: response.data.feedId,

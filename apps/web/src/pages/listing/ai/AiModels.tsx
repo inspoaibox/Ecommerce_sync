@@ -73,18 +73,6 @@ export default function AiModels() {
     }
   };
 
-  const loadChannels = async () => {
-    setLoading(true);
-    try {
-      const data: any = await aiModelApi.list();
-      setChannels(data);
-    } catch (e: any) {
-      message.error(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleAdd = () => {
     setEditingChannel(null);
     setFetchedModels([]);

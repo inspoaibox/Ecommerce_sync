@@ -11,7 +11,15 @@ const PLATFORM_PRESETS: Record<string, {
   code: string;
   apiBaseUrl: string;
   regions: { value: string; label: string }[];
-  fields: { key: string; label: string; required?: boolean; placeholder?: string; type?: 'text' | 'password' | 'number' | 'select' }[];
+  fields: { 
+    key: string; 
+    label: string; 
+    required?: boolean; 
+    placeholder?: string; 
+    type?: 'text' | 'password' | 'number' | 'select';
+    forRegions?: string[];  // 仅在指定区域显示
+    regionHint?: string;    // 区域提示
+  }[];
 }> = {
   walmart: {
     name: 'Walmart',
@@ -23,8 +31,12 @@ const PLATFORM_PRESETS: Record<string, {
       { value: 'MX', label: '墨西哥 (MX)' },
     ],
     fields: [
-      { key: 'clientId', label: 'Client ID', required: true, placeholder: '请输入Walmart Client ID' },
-      { key: 'clientSecret', label: 'Client Secret', required: true, placeholder: '请输入Walmart Client Secret', type: 'password' },
+      // OAuth 2.0 认证（美国市场）
+      { key: 'clientId', label: 'Client ID', required: true, placeholder: '请输入Walmart Client ID', regionHint: 'US市场必填' },
+      { key: 'clientSecret', label: 'Client Secret', required: true, placeholder: '请输入Walmart Client Secret', type: 'password', regionHint: 'US市场必填' },
+      // 数字签名认证（加拿大/国际市场）
+      { key: 'consumerId', label: 'Consumer ID', required: false, placeholder: '从Seller Center获取的Consumer ID（加拿大/国际市场必填）', forRegions: ['CA', 'MX'] },
+      { key: 'privateKey', label: 'Private Key', required: false, placeholder: '从Seller Center获取的Private Key（加拿大/国际市场必填）', type: 'password', forRegions: ['CA', 'MX'] },
       { key: 'channelType', label: 'Channel Type', required: false, placeholder: '从Seller Center获取的Consumer Channel Type（非美国市场必填）' },
       { key: 'accessToken', label: 'Access Token', required: false, placeholder: '首次授权后自动获取（可选）', type: 'password' },
       { key: 'refreshToken', label: 'Refresh Token', required: false, placeholder: '用于刷新Access Token（可选）', type: 'password' },
@@ -114,6 +126,7 @@ export default function ShopList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('');
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [syncConfigModal, setSyncConfigModal] = useState<{ open: boolean; shopId: string; shopName: string }>({
     open: false,
     shopId: '',
@@ -137,6 +150,7 @@ export default function ShopList() {
 
   const handlePlatformChange = (platform: string) => {
     setSelectedPlatform(platform);
+    setSelectedRegion('');  // 重置区域选择
     const preset = PLATFORM_PRESETS[platform];
     if (preset && !editingId) {
       form.setFieldsValue({
@@ -146,8 +160,9 @@ export default function ShopList() {
     }
   };
 
-  // 区域变化时的处理（Walmart 所有市场使用同一 API 地址，通过 WM_MARKET Header 区分）
-  const handleRegionChange = (_region: string) => {
+  // 区域变化时的处理
+  const handleRegionChange = (region: string) => {
+    setSelectedRegion(region);
     // Walmart 所有市场使用统一的 API 地址：https://marketplace.walmartapis.com
     // 区分市场通过请求头 WM_MARKET 实现，无需修改 API 地址
   };
@@ -189,6 +204,7 @@ export default function ShopList() {
     form.resetFields();
     setEditingId(null);
     setSelectedPlatform('');
+    setSelectedRegion('');
     loadData();
     refreshShops();
   };
@@ -197,6 +213,7 @@ export default function ShopList() {
     setEditingId(record.id);
     const platformCode = record.platform?.code || record.platformCode;
     setSelectedPlatform(platformCode);
+    setSelectedRegion(record.region || '');
     
     const formValues: any = {
       name: record.name,
@@ -259,6 +276,7 @@ export default function ShopList() {
   const handleOpenModal = () => {
     setEditingId(null);
     setSelectedPlatform('');
+    setSelectedRegion('');
     form.resetFields();
     form.setFieldsValue({ status: 'active' });
     setModalOpen(true);
@@ -338,33 +356,75 @@ export default function ShopList() {
               />
             </Form.Item>
           )}
+
+          {/* 加拿大/国际市场认证提示 */}
+          {selectedPlatform === 'walmart' && ['CA', 'MX'].includes(selectedRegion) && (
+            <div style={{ 
+              background: '#fff7e6', 
+              border: '1px solid #ffd591', 
+              borderRadius: 4, 
+              padding: '8px 12px', 
+              marginBottom: 16,
+              fontSize: 13,
+            }}>
+              <strong>⚠️ {selectedRegion === 'CA' ? '加拿大' : '墨西哥'}市场认证说明：</strong>
+              <br />
+              该市场使用数字签名认证方式，需要填写 <strong>Consumer ID</strong> 和 <strong>Private Key</strong>。
+              <br />
+              请从 Walmart Seller Center 获取这些凭证。Client ID 和 Client Secret 可留空。
+            </div>
+          )}
           
           <Form.Item name="apiBaseUrl" label="API地址">
             <Input placeholder="API基础地址（可选，使用默认值）" />
           </Form.Item>
 
           {/* 动态渲染平台特定的凭证字段 */}
-          {currentPreset?.fields.map(field => (
-            <Form.Item 
-              key={field.key} 
-              name={field.key} 
-              label={field.label}
-              rules={field.required ? [{ required: true, message: `请输入${field.label}` }] : []}
-            >
-              {field.type === 'password' ? (
-                <Input.Password placeholder={field.placeholder} visibilityToggle />
-              ) : field.type === 'number' ? (
-                <Input type="number" placeholder={field.placeholder} min={0} max={30} />
-              ) : field.type === 'select' && field.key === 'fulfillmentMode' ? (
-                <Select placeholder={field.placeholder} allowClear>
-                  <Select.Option value="SELLER_FULFILLED">卖家自发货 (Seller Fulfilled)</Select.Option>
-                  <Select.Option value="WFS">沃尔玛发货 (WFS)</Select.Option>
-                </Select>
-              ) : (
-                <Input placeholder={field.placeholder} />
-              )}
-            </Form.Item>
-          ))}
+          {currentPreset?.fields
+            .filter(field => {
+              // 如果字段指定了 forRegions，只在这些区域显示
+              if (field.forRegions && field.forRegions.length > 0) {
+                return field.forRegions.includes(selectedRegion);
+              }
+              return true;
+            })
+            .map(field => {
+              // 判断字段是否必填（CA/国际市场的 consumerId 和 privateKey 是必填的）
+              const isRequired = field.required || 
+                (field.forRegions?.includes(selectedRegion) && ['consumerId', 'privateKey'].includes(field.key));
+              
+              return (
+                <Form.Item 
+                  key={field.key} 
+                  name={field.key} 
+                  label={
+                    <span>
+                      {field.label}
+                      {field.forRegions && (
+                        <Tag color="orange" style={{ marginLeft: 8, fontSize: 10 }}>
+                          {field.forRegions.join('/')}市场
+                        </Tag>
+                      )}
+                    </span>
+                  }
+                  rules={isRequired ? [{ required: true, message: `请输入${field.label}` }] : []}
+                  tooltip={field.forRegions ? `此字段仅在 ${field.forRegions.join('/')} 市场需要填写` : undefined}
+                >
+                  {field.type === 'password' ? (
+                    <Input.Password placeholder={field.placeholder} visibilityToggle />
+                  ) : field.type === 'number' ? (
+                    <Input type="number" placeholder={field.placeholder} min={0} max={30} />
+                  ) : field.type === 'select' && field.key === 'fulfillmentMode' ? (
+                    <Select placeholder={field.placeholder} allowClear>
+                      <Select.Option value="SELLER_FULFILLED">卖家自发货 (Seller Fulfilled)</Select.Option>
+                      <Select.Option value="WFS">沃尔玛发货 (WFS)</Select.Option>
+                    </Select>
+                  ) : (
+                    <Input placeholder={field.placeholder} />
+                  )}
+                </Form.Item>
+              );
+            })}
 
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="店铺描述（可选）" />
