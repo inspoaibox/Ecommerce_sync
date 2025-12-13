@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Card, Table, Button, Space, Input, Select, Tag, Modal, message, Statistic, Row, Col, Image, Popconfirm, TreeSelect, Alert, Tabs, Descriptions, Upload, Radio } from 'antd';
-import { DeleteOutlined, ReloadOutlined, SendOutlined, EyeOutlined, FolderOutlined, RobotOutlined, StopOutlined, UploadOutlined, DownloadOutlined, FileExcelOutlined } from '@ant-design/icons';
+import { useState, useEffect, useMemo } from 'react';
+import { Card, Table, Button, Space, Input, Select, Tag, Modal, message, Statistic, Row, Col, Image, Popconfirm, TreeSelect, Alert, Tabs, Descriptions, Upload, Radio, Checkbox, Dropdown } from 'antd';
+import { DeleteOutlined, ReloadOutlined, SendOutlined, EyeOutlined, FolderOutlined, RobotOutlined, StopOutlined, UploadOutlined, DownloadOutlined, FileExcelOutlined, SettingOutlined } from '@ant-design/icons';
 import { productPoolApi, channelApi, shopApi, platformCategoryApi, platformApi, aiModelApi, aiOptimizeApi, listingApi } from '@/services/api';
 import { getProductTypeLabel, getProductTypeColor } from '@/config/standard-fields.config';
 
@@ -287,6 +287,26 @@ export default function ProductPool() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
 
+  // 编辑弹窗
+  const [editModal, setEditModal] = useState(false);
+  const [editProduct, setEditProduct] = useState<any>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [saving, setSaving] = useState(false);
+
+  // 列配置
+  const [columnConfig, setColumnConfig] = useState<{ key: string; visible: boolean; order: number }[]>(() => {
+    // 从 localStorage 读取配置
+    const saved = localStorage.getItem('productPool_columnConfig');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
   useEffect(() => {
     loadChannelsAndShops();
   }, []);
@@ -505,6 +525,84 @@ export default function ProductPool() {
     }
   };
 
+  // 编辑商品
+  const handleEdit = async (record: any) => {
+    try {
+      const res: any = await productPoolApi.get(record.id);
+      setEditProduct(res);
+      const attrs = res.channelAttributes || {};
+      // 五点描述：数组转换为换行分隔的字符串
+      const bulletPoints = attrs.bulletPoints || [];
+      const bulletPointsStr = Array.isArray(bulletPoints) ? bulletPoints.join('\n') : bulletPoints;
+      // 关键词：数组转换为逗号分隔的字符串
+      const keywords = attrs.keywords || [];
+      const keywordsStr = Array.isArray(keywords) ? keywords.join(', ') : keywords;
+      
+      setEditForm({
+        title: res.title || attrs.title || '',
+        description: res.description || attrs.description || '',
+        bulletPoints: bulletPointsStr,
+        keywords: keywordsStr,
+        price: res.price || attrs.price || 0,
+        stock: res.stock || attrs.stock || 0,
+        mainImageUrl: res.mainImageUrl || attrs.mainImageUrl || '',
+        color: attrs.color || '',
+        material: attrs.material || '',
+        productDescription: attrs.productDescription || '',
+        productCertification: attrs.productCertification || '',
+        placeOfOrigin: attrs.placeOfOrigin || '',
+      });
+      setEditModal(true);
+    } catch (e: any) {
+      message.error(e.message || '获取商品信息失败');
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editProduct) return;
+    setSaving(true);
+    try {
+      // 五点描述：换行分隔的字符串转换为数组
+      const bulletPointsArr = editForm.bulletPoints
+        ? editForm.bulletPoints.split('\n').map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      // 关键词：逗号分隔的字符串转换为数组
+      const keywordsArr = editForm.keywords
+        ? editForm.keywords.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      
+      const updateData = {
+        title: editForm.title,
+        description: editForm.description,
+        price: Number(editForm.price) || 0,
+        stock: Number(editForm.stock) || 0,
+        mainImageUrl: editForm.mainImageUrl,
+        channelAttributes: {
+          ...(editProduct.channelAttributes || {}),
+          // 同步核心字段到 channelAttributes
+          title: editForm.title,
+          description: editForm.description,
+          bulletPoints: bulletPointsArr,
+          keywords: keywordsArr,
+          // 其他字段
+          color: editForm.color,
+          material: editForm.material,
+          productDescription: editForm.productDescription,
+          productCertification: editForm.productCertification,
+          placeOfOrigin: editForm.placeOfOrigin,
+        },
+      };
+      await productPoolApi.update(editProduct.id, updateData);
+      message.success('保存成功');
+      setEditModal(false);
+      loadData();
+    } catch (e: any) {
+      message.error(e.message || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // AI 优化相关
   const loadAiConfig = async () => {
     try {
@@ -709,11 +807,14 @@ export default function ProductPool() {
     },
     {
       title: '操作',
-      width: 140,
+      width: 180,
       render: (_: any, record: any) => (
         <Space>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
             详情
+          </Button>
+          <Button type="link" size="small" onClick={() => handleEdit(record)}>
+            编辑
           </Button>
           <Button type="link" size="small" icon={<RobotOutlined />} onClick={() => handleOpenAiOptimize(record)}>
             AI
@@ -723,6 +824,67 @@ export default function ProductPool() {
     },
   ];
 
+  // 所有可配置的列定义
+  const allColumnDefs = useMemo(() => [
+    { key: 'mainImageUrl', title: '图片', defaultVisible: true },
+    { key: 'sku', title: 'SKU', defaultVisible: true },
+    { key: 'title', title: '标题', defaultVisible: true },
+    { key: 'channel', title: '渠道', defaultVisible: true },
+    { key: 'price', title: '价格', defaultVisible: true },
+    { key: 'shippingFee', title: '运费', defaultVisible: true },
+    { key: 'salePrice', title: '优惠价格', defaultVisible: false },
+    { key: 'totalPrice', title: '总价', defaultVisible: true },
+    { key: 'saleTotalPrice', title: '优惠总价', defaultVisible: false },
+    { key: 'stock', title: '库存', defaultVisible: true },
+    { key: 'platformCategoryId', title: '平台类目', defaultVisible: true },
+    { key: 'unAvailablePlatform', title: '不可售平台', defaultVisible: false },
+    { key: 'createdAt', title: '创建时间', defaultVisible: true },
+  ], []);
+
+  // 初始化列配置
+  useEffect(() => {
+    if (columnConfig.length === 0) {
+      const defaultConfig = allColumnDefs.map((col, idx) => ({ key: col.key, visible: col.defaultVisible, order: idx }));
+      setColumnConfig(defaultConfig);
+    }
+  }, [allColumnDefs, columnConfig.length]);
+
+  // 保存列配置到 localStorage
+  const saveColumnConfig = (config: typeof columnConfig) => {
+    setColumnConfig(config);
+    localStorage.setItem('productPool_columnConfig', JSON.stringify(config));
+  };
+
+  // 切换列显示/隐藏
+  const toggleColumnVisible = (key: string) => {
+    const newConfig = columnConfig.map(c => c.key === key ? { ...c, visible: !c.visible } : c);
+    saveColumnConfig(newConfig);
+  };
+
+  // 重置列配置
+  const resetColumnConfig = () => {
+    const defaultConfig = allColumnDefs.map((col, idx) => ({ key: col.key, visible: col.defaultVisible, order: idx }));
+    saveColumnConfig(defaultConfig);
+    message.success('已重置为默认配置');
+  };
+
+  // 根据配置过滤列
+  const filteredColumns = useMemo(() => {
+    const configMap = new Map(columnConfig.map(c => [c.key, c]));
+    // 为每个原始列添加 key
+    const columnsWithKey = columns.slice(0, -1).map((col: any, idx: number) => {
+      const def = allColumnDefs[idx];
+      return { ...col, key: def?.key || `col_${idx}` };
+    });
+    // 过滤可见列
+    const visibleCols = columnsWithKey.filter((col: any) => {
+      const cfg = configMap.get(col.key);
+      const def = allColumnDefs.find(d => d.key === col.key);
+      return cfg ? cfg.visible : (def?.defaultVisible ?? true);
+    });
+    // 添加操作列
+    return [...visibleCols, columns[columns.length - 1]];
+  }, [columns, columnConfig, allColumnDefs]);
 
   return (
     <div>
@@ -833,11 +995,37 @@ export default function ProductPool() {
           <Button icon={<ReloadOutlined />} onClick={() => { loadStats(); loadData(); }}>
             刷新
           </Button>
+          <Dropdown
+            trigger={['click']}
+            dropdownRender={() => (
+              <div style={{ background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.15)', padding: 12, minWidth: 200 }}>
+                <div style={{ fontWeight: 500, marginBottom: 8, borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>显示列</div>
+                <div style={{ maxHeight: 300, overflow: 'auto' }}>
+                  {allColumnDefs.map(col => {
+                    const cfg = columnConfig.find(c => c.key === col.key);
+                    const isVisible = cfg ? cfg.visible : col.defaultVisible;
+                    return (
+                      <div key={col.key} style={{ padding: '4px 0' }}>
+                        <Checkbox checked={isVisible} onChange={() => toggleColumnVisible(col.key)}>
+                          {col.title}
+                        </Checkbox>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, marginTop: 8 }}>
+                  <Button size="small" onClick={resetColumnConfig}>重置默认</Button>
+                </div>
+              </div>
+            )}
+          >
+            <Button icon={<SettingOutlined />}>列配置</Button>
+          </Dropdown>
         </Space>
 
         <Table
           rowKey="id"
-          columns={columns}
+          columns={filteredColumns}
           dataSource={data}
           loading={loading}
           rowSelection={{
@@ -1145,6 +1333,150 @@ export default function ProductPool() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* 编辑弹窗 */}
+      <Modal
+        title={`编辑商品 - ${editProduct?.sku || ''}`}
+        open={editModal}
+        onOk={handleSaveEdit}
+        onCancel={() => { setEditModal(false); setEditProduct(null); setEditForm({}); }}
+        confirmLoading={saving}
+        okText="保存"
+        width={700}
+      >
+        <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>商品标题</div>
+            <Input
+              value={editForm.title}
+              onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+              placeholder="请输入商品标题"
+            />
+          </div>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 8, fontWeight: 500 }}>价格</div>
+                <Input
+                  type="number"
+                  value={editForm.price}
+                  onChange={e => setEditForm({ ...editForm, price: e.target.value })}
+                  placeholder="请输入价格"
+                  addonBefore="$"
+                />
+              </div>
+            </Col>
+            <Col span={12}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 8, fontWeight: 500 }}>库存</div>
+                <Input
+                  type="number"
+                  value={editForm.stock}
+                  onChange={e => setEditForm({ ...editForm, stock: e.target.value })}
+                  placeholder="请输入库存"
+                />
+              </div>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 8, fontWeight: 500 }}>颜色</div>
+                <Input
+                  value={editForm.color}
+                  onChange={e => setEditForm({ ...editForm, color: e.target.value })}
+                  placeholder="请输入颜色"
+                />
+              </div>
+            </Col>
+            <Col span={12}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 8, fontWeight: 500 }}>材质</div>
+                <Input
+                  value={editForm.material}
+                  onChange={e => setEditForm({ ...editForm, material: e.target.value })}
+                  placeholder="请输入材质"
+                />
+              </div>
+            </Col>
+          </Row>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>产地</div>
+            <Input
+              value={editForm.placeOfOrigin}
+              onChange={e => setEditForm({ ...editForm, placeOfOrigin: e.target.value })}
+              placeholder="请输入产地"
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>主图 URL</div>
+            <Input
+              value={editForm.mainImageUrl}
+              onChange={e => setEditForm({ ...editForm, mainImageUrl: e.target.value })}
+              placeholder="请输入主图 URL"
+            />
+            {editForm.mainImageUrl && (
+              <div style={{ marginTop: 8 }}>
+                <Image src={editForm.mainImageUrl} width={100} height={100} style={{ objectFit: 'cover' }} />
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>商品描述</div>
+            <Input.TextArea
+              value={editForm.description}
+              onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+              placeholder="请输入商品描述"
+              rows={3}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>五点描述（每行一条）</div>
+            <Input.TextArea
+              value={editForm.bulletPoints}
+              onChange={e => setEditForm({ ...editForm, bulletPoints: e.target.value })}
+              placeholder="请输入五点描述，每行一条"
+              rows={5}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>搜索关键词（逗号分隔）</div>
+            <Input.TextArea
+              value={editForm.keywords}
+              onChange={e => setEditForm({ ...editForm, keywords: e.target.value })}
+              placeholder="请输入搜索关键词，用逗号分隔"
+              rows={2}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>产品说明（说明书链接）</div>
+            <Input.TextArea
+              value={editForm.productDescription}
+              onChange={e => setEditForm({ ...editForm, productDescription: e.target.value })}
+              placeholder="请输入产品说明书链接，多个链接用换行分隔"
+              rows={2}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 8, fontWeight: 500 }}>产品资质（认证证书链接）</div>
+            <Input.TextArea
+              value={editForm.productCertification}
+              onChange={e => setEditForm({ ...editForm, productCertification: e.target.value })}
+              placeholder="请输入产品资质链接，格式：证书名称: URL，多个用换行分隔"
+              rows={2}
+            />
+          </div>
+        </div>
       </Modal>
     </div>
   );

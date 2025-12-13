@@ -395,12 +395,36 @@ export default function ListingProducts() {
               )}
               {selectedProduct.channelAttributes?.productDescription && (
                 <Descriptions.Item label="产品说明" span={3}>
-                  <div style={{ maxHeight: 100, overflow: 'auto' }}>{selectedProduct.channelAttributes.productDescription}</div>
+                  <div style={{ maxHeight: 100, overflow: 'auto' }}>
+                    {selectedProduct.channelAttributes.productDescription.split('\n').map((url: string, idx: number) => (
+                      url.startsWith('http') ? (
+                        <div key={idx}>
+                          <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
+                        </div>
+                      ) : (
+                        <div key={idx}>{url}</div>
+                      )
+                    ))}
+                  </div>
                 </Descriptions.Item>
               )}
               {selectedProduct.channelAttributes?.productCertification && (
                 <Descriptions.Item label="产品资质" span={3}>
-                  <div style={{ maxHeight: 100, overflow: 'auto' }}>{selectedProduct.channelAttributes.productCertification}</div>
+                  <div style={{ maxHeight: 100, overflow: 'auto' }}>
+                    {selectedProduct.channelAttributes.productCertification.split('\n').map((line: string, idx: number) => {
+                      const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
+                      if (urlMatch) {
+                        const url = urlMatch[1];
+                        const title = line.replace(url, '').replace(/:\s*$/, '').trim() || '证书';
+                        return (
+                          <div key={idx}>
+                            <a href={url} target="_blank" rel="noopener noreferrer">{title}</a>
+                          </div>
+                        );
+                      }
+                      return <div key={idx}>{line}</div>;
+                    })}
+                  </div>
                 </Descriptions.Item>
               )}
             </Descriptions>

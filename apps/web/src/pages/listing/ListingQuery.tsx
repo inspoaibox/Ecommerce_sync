@@ -290,6 +290,16 @@ export default function ListingQuery() {
           productType,
           supplier: specific.sellerInfo?.sellerStore,
           
+          // ==================== 产品说明书（文档链接）====================
+          productDescription: specific.fileUrls?.length > 0 
+            ? specific.fileUrls.join('\n') 
+            : undefined,
+          
+          // ==================== 产品资质（认证证书链接）====================
+          productCertification: specific.certificationList?.length > 0
+            ? specific.certificationList.map((cert: any) => `${cert.title}: ${cert.url}`).join('\n')
+            : undefined,
+          
           // ==================== 不可售平台 ====================
           unAvailablePlatform: specific.unAvailablePlatform || [],
           

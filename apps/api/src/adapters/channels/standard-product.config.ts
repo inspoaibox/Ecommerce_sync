@@ -85,7 +85,7 @@ export const BASIC_FIELDS: FieldDefinition[] = [
   { key: 'productType', label: '商品性质', type: 'string', description: '超大件/轻小件/普通件/多包裹' },
   { key: 'supplier', label: '供货商', type: 'string', description: '供货商家名称' },
   { key: 'unAvailablePlatform', label: '不可售平台', type: 'array', description: '禁止销售的平台列表，如 [{id: "1", name: "Wayfair"}]' },
-  { key: 'productDescription', label: '产品说明', type: 'html', description: '详细的产品使用说明、安装指南、注意事项等' },
+  { key: 'productDescription', label: '产品说明', type: 'string', description: '产品说明书链接或详细的产品使用说明、安装指南、注意事项等' },
   { key: 'productCertification', label: '产品资质', type: 'string', description: '产品认证信息、合规证书、质检报告等资质说明' },
 ];
 

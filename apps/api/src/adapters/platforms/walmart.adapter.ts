@@ -508,15 +508,27 @@ export class WalmartAdapter extends BasePlatformAdapter {
   // 查询Feed状态（单页）
   async getFeedStatus(feedId: string, includeDetails: boolean = true, offset: number = 0, limit: number = 50): Promise<any> {
     try {
-      const headers = await this.getHeaders();
+      const baseEndpoint = this.buildEndpoint(`/v3/feeds/${feedId}`);
+      
+      // 构建查询参数字符串
+      const queryParams = `includeDetails=${includeDetails}&offset=${offset}&limit=${limit}`;
+      const endpointWithParams = `${baseEndpoint}?${queryParams}`;
+      
+      // 获取请求头（传入完整 endpoint 用于数字签名）
+      const headers = await this.getHeaders(endpointWithParams, 'GET');
 
-      const endpoint = this.buildEndpoint(`/v3/feeds/${feedId}`);
-      const response = await this.client.get(endpoint, {
-        headers,
-        params: { includeDetails, offset, limit },
-      });
-
-      return response.data;
+      // 数字签名模式：使用完整 URL，不使用 params
+      // OAuth 模式：可以使用 params
+      if (this.authMode === 'signature') {
+        const response = await this.client.get(endpointWithParams, { headers });
+        return response.data;
+      } else {
+        const response = await this.client.get(baseEndpoint, {
+          headers,
+          params: { includeDetails, offset, limit },
+        });
+        return response.data;
+      }
     } catch (error: any) {
       const errData = error.response?.data;
       const errMsg = errData?.error?.[0]?.description || errData?.message || error.message;

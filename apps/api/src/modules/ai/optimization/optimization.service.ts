@@ -400,11 +400,16 @@ export class OptimizationService {
         if (update.data.title) updateData.title = update.data.title;
         if (update.data.description) updateData.description = update.data.description;
         
-        // 如果有 bulletPoints 或 keywords，更新到 channelAttributes
-        if (update.data.aiOptimizedData?.bulletPoints || update.data.aiOptimizedData?.keywords) {
+        // 如果有 AI 优化的字段，同步到 channelAttributes
+        const hasAiFields = update.data.description || update.data.aiOptimizedData?.bulletPoints || update.data.aiOptimizedData?.keywords;
+        if (hasAiFields) {
           updateData.channelAttributes = {
             ...existingAttrs,
           };
+          // description 同步到 channelAttributes.description（用于映射规则取值）
+          if (update.data.description) {
+            updateData.channelAttributes.description = update.data.description;
+          }
           if (update.data.aiOptimizedData?.bulletPoints) {
             // 使用标准字段名 bulletPoints
             updateData.channelAttributes.bulletPoints = update.data.aiOptimizedData.bulletPoints;
@@ -428,11 +433,16 @@ export class OptimizationService {
         if (update.data.title) updateData.title = update.data.title;
         if (update.data.description) updateData.description = update.data.description;
         
-        // 如果有 bulletPoints 或 keywords，更新到 channelAttributes
-        if (update.data.aiOptimizedData?.bulletPoints || update.data.aiOptimizedData?.keywords) {
+        // 如果有 AI 优化的字段，同步到 channelAttributes
+        const hasAiFields = update.data.description || update.data.aiOptimizedData?.bulletPoints || update.data.aiOptimizedData?.keywords;
+        if (hasAiFields) {
           updateData.channelAttributes = {
             ...existingAttrs,
           };
+          // description 同步到 channelAttributes.description（用于映射规则取值）
+          if (update.data.description) {
+            updateData.channelAttributes.description = update.data.description;
+          }
           if (update.data.aiOptimizedData?.bulletPoints) {
             updateData.channelAttributes.bulletPoints = update.data.aiOptimizedData.bulletPoints;
           }
